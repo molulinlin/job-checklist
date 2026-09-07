@@ -2755,29 +2755,33 @@ let firebaseCompanyData = null; // 存储从Firebase加载的公司数据
 
 async function loadCompanyDatabaseFromFirebase() {
   try {
-    console.log('[loadCompanyDatabase] 开始从GitHub加载公司数据库...');
-    const response = await fetch('https://raw.githubusercontent.com/molulinlin/job-checklist/main/company_database.json');
+    console.log('[loadCompanyDatabase] 开始从Firebase加载公司数据库...');
+    const docRef = db.collection("system").doc("companyDatabase");
+    const docSnap = await docRef.get();
     
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    if (data && data.companies && Array.isArray(data.companies)) {
-      firebaseCompanyData = data.companies;
-      console.log('[loadCompanyDatabase] ✅ 成功加载', firebaseCompanyData.length, '条公司数据');
-      // 覆盖MOMO_DEFAULTS
-      if (firebaseCompanyData.length > 0) {
-        MOMO_DEFAULTS.length = 0; // 清空原数组
-        firebaseCompanyData.forEach(c => MOMO_DEFAULTS.push(c));
-        console.log('[loadCompanyDatabase] ✅ 已覆盖MOMO_DEFAULTS');
+    if (docSnap.exists) {
+      const data = docSnap.data();
+      if (data && data.companies && Array.isArray(data.companies)) {
+        firebaseCompanyData = data.companies;
+        console.log('[loadCompanyDatabase] ✅ 成功加载', firebaseCompanyData.length, '条公司数据');
+        // 覆盖MOMO_DEFAULTS
+        if (firebaseCompanyData.length > 0) {
+          MOMO_DEFAULTS.length = 0; // 清空原数组
+          firebaseCompanyData.forEach(c => MOMO_DEFAULTS.push(c));
+          console.log('[loadCompanyDatabase] ✅ 已覆盖MOMO_DEFAULTS');
+        }
+        return true;
+      } else {
+        console.log('[loadCompanyDatabase] Firebase中无有效公司数据');
+        return false;
       }
     } else {
-      console.log('[loadCompanyDatabase] GitHub数据格式无效');
+      console.log('[loadCompanyDatabase] Firebase中无companyDatabase文档');
+      return false;
     }
   } catch (err) {
     console.warn('[loadCompanyDatabase] 加载失败:', err);
+    return false;
   }
 }
 
@@ -3627,7 +3631,6 @@ const DATA = [
 const MOMO_DEFAULTS = [
 
 
-
     {id:'momo_湖北农发集团',section:'农业/食品',company:'湖北农发集团',position:'工程建设类岗位，市场营销类岗位，智慧农业类岗位，生产技术类岗位，粮油食品类岗位，职能管理类岗位',location:'河北, 湖北',deadline:'2026-05-08',priority:'high',priLabel:'⭐⭐⭐',links:[{text:'http://campus.51job.com/hbnyfzjt2026/m/job.html',url:'http://campus.51job.com/hbnyfzjt2026/m/job.html'}],notice:'省属国企,五险一金足额缴纳,定期体检,餐补,带薪年假,10万-15万/年',note:'春招·[\'农业\']'},
     {id:'momo_Nova',section:'互联网/科技',company:'Nova',position:'Application Engineer，Field Service Engineer，Service Coordinator Intern',location:'上海, 东莞, 北京, 合肥, 江阴, 深圳',deadline:'招满即止',priority:'mid',priLabel:'⭐⭐',links:[{text:'https://campus.51job.com/nova2026',url:'https://campus.51job.com/nova2026'}],notice:'半导体量测领军外企, 流程无笔试, 核心技术岗, 18k-30k*14',note:'春招·[\'半导体\']'},
     {id:'momo_中国一拖',section:'制造业',company:'中国一拖',position:'工艺工程师，材料工程师，研发工程师，职能管理岗，国内销售经理，海外销售经理',location:'南京, 洛阳, 海外',deadline:'招满即止',priority:'high',priLabel:'⭐⭐⭐',links:[{text:'https://zgytjt.zhaopin.com',url:'https://zgytjt.zhaopin.com/'}],notice:'五险二金,一次性安家费,免费公寓,员工餐厅,洛阳/南京落户补贴,8k-15k*14',note:'春招·[\'制造业\']'},
@@ -3804,11 +3807,10 @@ function initMomoDefaults() {
   // 用户主动删除的公司，不再自动补回
   var deletedNames = state._deleted_companies || [];
 
-  // 只更新已有公司的metadata，不自动添加新公司
   MOMO_DEFAULTS.forEach(function(def) {
     var normalized = (def.company||'').replace(/\s/g,'').toLowerCase();
+    // 只更新已有公司的metadata
     if (existingNames.has(normalized)) {
-      // Update metadata for existing companies
       var existing = state._custom_companies.find(function(c) {
         return (c.company||'').replace(/\s/g,'').toLowerCase() === normalized;
       });
@@ -3825,8 +3827,127 @@ function initMomoDefaults() {
         updated++;
       }
     }
-    // 不再自动添加新公司到用户列表
+    // 不再自动添加新公司到用户列表，仅作为搜索候选池
+  }););
+  
+  if (added > 0 || updated > 0) {
+    saveState(state);
+    console.log('[momoDefaults] injected ' + added + ' new, updated metadata for ' + updated + ' existing');
+  }
+}
+
+// ===== 去重逻辑：清理重复公司卡片（安全合并版） =====
+function deduplicateCompanies() {
+  const state = loadState();
+  if (!state._custom_companies || state._custom_companies.length === 0) return;
+  
+  const PRI_ORDER = { "high": 0, "mid": 1, "low": 2 };
+  const seen = new Map(); // normalized name -> { index, company }
+  const toRemove = []; // indices to remove
+  const mergeLog = []; // 记录合并操作
+  
+  state._custom_companies.forEach((c, idx) => {
+    const normalized = (c.company || '').replace(/\s/g, '').toLowerCase();
+    
+    if (seen.has(normalized)) {
+      // Duplicate found - decide which to keep
+      const existing = seen.get(normalized);
+      
+      // 实时读取两个项的进度数据
+      const existingState = state[existing.company.id] || { positions: [], note: '' };
+      const currentState = state[c.id] || { positions: [], note: '' };
+      const existingPosCount = (existingState.positions || []).length;
+      const currentPosCount = (currentState.positions || []).length;
+      
+      // Prefer: 1) momo_ ID, 2) more progress data, 3) higher priority, 4) earlier index
+      let keepExisting = true;
+      if (c.id.startsWith('momo_') && !existing.company.id.startsWith('momo_')) {
+        keepExisting = false; // Prefer momo_ ID
+      } else if (currentPosCount > existingPosCount) {
+        keepExisting = false; // Prefer more progress
+      } else if (currentPosCount === existingPosCount) {
+        const priA = PRI_ORDER[c.priority] ?? 1;
+        const priB = PRI_ORDER[existing.company.priority] ?? 1;
+        if (priA < priB) {
+          keepExisting = false; // Prefer higher priority (high=0 < mid=1 < low=2)
+        }
+      }
+      
+      if (keepExisting) {
+        // Merge current into existing
+        const targetId = existing.company.id;
+        const sourceId = c.id;
+        const targetState = state[targetId] || { positions: [], note: '' };
+        const sourceState = state[sourceId] || { positions: [], note: '' };
+        
+        // Merge positions (by name)
+        const targetPosNames = new Set((targetState.positions || []).map(p => p.name));
+        (sourceState.positions || []).forEach(p => {
+          if (!targetPosNames.has(p.name)) {
+            targetState.positions = targetState.positions || [];
+            targetState.positions.push(p);
+            mergeLog.push(`  岗位 "${p.name}" (${p.status}) 从 ${sourceId} 合并到 ${targetId}`);
+          }
+        });
+        
+        // Merge note (append if different)
+        if (sourceState.note && sourceState.note !== targetState.note) {
+          targetState.note = targetState.note ? targetState.note + '\n[合并] ' + sourceState.note : sourceState.note;
+          mergeLog.push(`  备注从 ${sourceId} 合并到 ${targetId}`);
+        }
+        
+        state[targetId] = targetState;
+        toRemove.push(idx);
+        console.log('[dedup] 合并并移除重复项:', c.company, '(', sourceId, '→', targetId, ')');
+      } else {
+        // Merge existing into current
+        const targetId = c.id;
+        const sourceId = existing.company.id;
+        const targetState = state[targetId] || { positions: [], note: '' };
+        const sourceState = state[sourceId] || { positions: [], note: '' };
+        
+        // Merge positions (by name)
+        const targetPosNames = new Set((targetState.positions || []).map(p => p.name));
+        (sourceState.positions || []).forEach(p => {
+          if (!targetPosNames.has(p.name)) {
+            targetState.positions = targetState.positions || [];
+            targetState.positions.push(p);
+            mergeLog.push(`  岗位 "${p.name}" (${p.status}) 从 ${sourceId} 合并到 ${targetId}`);
+          }
+        });
+        
+        // Merge note (append if different)
+        if (sourceState.note && sourceState.note !== targetState.note) {
+          targetState.note = targetState.note ? targetState.note + '\n[合并] ' + sourceState.note : sourceState.note;
+          mergeLog.push(`  备注从 ${sourceId} 合并到 ${targetId}`);
+        }
+        
+        state[targetId] = targetState;
+        toRemove.push(existing.index);
+        seen.set(normalized, { index: idx, company: c });
+        console.log('[dedup] 合并并移除重复项:', existing.company.company, '(', sourceId, '→', targetId, ')');
+      }
+    } else {
+      seen.set(normalized, { index: idx, company: c });
+    }
   });
+  
+  if (toRemove.length > 0) {
+    if (mergeLog.length > 0) {
+      console.log('[dedup] 合并详情:\n' + mergeLog.join('\n'));
+    }
+    // Remove duplicates (sort indices descending to avoid shifting)
+    toRemove.sort((a, b) => b - a);
+    toRemove.forEach(idx => {
+      const removed = state._custom_companies.splice(idx, 1)[0];
+      delete state[removed.id]; // Clean up removed item's progress data
+    });
+    saveState(state);
+    console.log('[dedup] ✅ 去重完成，移除', toRemove.length, '个重复项');
+  } else {
+    console.log('[dedup] 未发现重复项');
+  }
+}
 
 const STORAGE_KEY = "job_checklist_v3";
 
