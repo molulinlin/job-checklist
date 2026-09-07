@@ -3026,18 +3026,18 @@ async function pollRemoteSync() {
   if (!currentSyncHash || !firebaseReady) return;
 
   try {
-    const ref = getFirestoreRef();
-    if (!ref) return;
-
-    const doc = await ref.get();
-    if (doc.exists && doc.data() && doc.data().data) {
-      const remoteData = doc.data().data;
+    const res = await fetch(_firestoreUrl());
+    if (!res.ok) {
+      if (res.status === 404) { console.log('[pollSync] 远程文档不存在'); return; }
+      throw new Error('HTTP ' + res.status);
+    }
+    const json = await res.json();
+    const remoteData = json?.fields?.data?.mapValue?.fields || null;
+    if (remoteData) {
       const localData = loadStateFromLocal();
       const remoteJson = JSON.stringify(remoteData);
       const localJson = JSON.stringify(localData);
-
-      console.log('[pollSync] 拉取云端数据, 本地keys:', Object.keys(localData).filter(k => !k.startsWith('_')), ', 远程keys:', Object.keys(remoteData).filter(k => !k.startsWith('_')));
-
+      console.log('[pollSync] REST API 拉取, 本地keys:', Object.keys(localData).filter(k => !k.startsWith('_')), ', 远程keys:', Object.keys(remoteData).filter(k => !k.startsWith('_')));
       if (remoteJson !== localJson) {
         console.log('[pollSync] 检测到数据差异，弹窗让用户决定');
         _pendingSyncData = remoteData;
@@ -3046,10 +3046,10 @@ async function pollRemoteSync() {
         console.log('[pollSync] 数据一致，无需更新');
       }
     } else {
-      console.log('[pollSync] 远程文档不存在或无 data 字段');
+      console.log('[pollSync] 远程文档无数据');
     }
   } catch (err) {
-    console.warn("[pollSync] 拉取失败:", err);
+    console.warn("[pollSync] REST API 拉取失败:", err);
     setSyncStatus("error", "⚠️ 同步失败，下次轮询重试");
   }
 }
@@ -3821,6 +3821,7 @@ function initMomoDefaults() {
         existing.priLabel = def.priLabel;
         existing.position = def.position;
         existing.deadline = def.deadline;
+        existing.section = def.section; // 修复：更新行业标签（从Firestore恢复的旧数据可能section不对）
         if (!existing.links || existing.links.length === 0) {
           existing.links = def.links;
         }
@@ -4203,6 +4204,39 @@ async function updatePasswordStatus() {
   }
 }
 
+// ===== Firestore REST API (替代SDK WebChannel，解决网络超时问题) =====
+function _toFirestoreValue(val) {
+  if (val === null || val === undefined) return { nullValue: null };
+  if (typeof val === 'string') return { stringValue: val };
+  if (typeof val === 'number') return val % 1 === 0 ? { integerValue: String(val) } : { doubleValue: val };
+  if (typeof val === 'boolean') return { booleanValue: val };
+  if (Array.isArray(val)) return { arrayValue: { values: val.map(v => _toFirestoreValue(v)) } };
+  if (typeof val === 'object') {
+    const fields = {};
+    Object.keys(val).forEach(k => { fields[k] = _toFirestoreValue(val[k]); });
+    return { mapValue: { fields } };
+  }
+  return { stringValue: String(val) };
+}
+function _fromFirestoreValue(fv) {
+  if ('nullValue' in fv) return null;
+  if ('stringValue' in fv) return fv.stringValue;
+  if ('integerValue' in fv) return parseInt(fv.integerValue, 10);
+  if ('doubleValue' in fv) return fv.doubleValue;
+  if ('booleanValue' in fv) return fv.booleanValue;
+  if ('timestampValue' in fv) return fv.timestampValue;
+  if ('arrayValue' in fv) return (fv.arrayValue.values || []).map(v => _fromFirestoreValue(v));
+  if ('mapValue' in fv) {
+    const obj = {};
+    Object.keys(fv.mapValue.fields || {}).forEach(k => { obj[k] = _fromFirestoreValue(fv.mapValue.fields[k]); });
+    return obj;
+  }
+  return null;
+}
+function _firestoreUrl() {
+  return `https://firestore.googleapis.com/v1/projects/find-job---checklist/databases/(default)/documents/sync_codes/${currentSyncHash}/data/checklist?key=AIzaSyAgNy37pCBs_TykOJFxphFqUSiqruhajEc`;
+}
+
 async function syncToFirestore(state) {
   if (!firebaseReady || !currentSyncHash) {
     console.warn('[syncToFirestore] 跳过: firebaseReady=', firebaseReady, 'currentSyncHash=', !!currentSyncHash);
@@ -4211,24 +4245,24 @@ async function syncToFirestore(state) {
   }
   try {
     setSyncStatus("syncing", "⏳ 同步中...");
-    const ref = getFirestoreRef();
-    if (!ref) return;
     _isLocalWrite = true;
-    console.log('[syncToFirestore] 开始写入 Firestore, 数据 keys:', Object.keys(state));
-    await ref.set({
-      data: state,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    console.log('[syncToFirestore] REST API 写入, keys:', Object.keys(state));
+    const res = await fetch(_firestoreUrl(), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { data: _toFirestoreValue(state), updatedAt: _toFirestoreValue(new Date().toISOString()) } })
     });
-    console.log('[syncToFirestore] ✅ 写入成功');
+    if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + await res.text());
+    console.log('[syncToFirestore] ✅ REST API 写入成功');
     setSyncStatus("synced", "✅ 已同步到云端");
     pendingSync = false;
   } catch (err) {
-    console.warn("[syncToFirestore] ❌ 写入失败:", err);
+    console.warn("[syncToFirestore] ❌ REST API 写入失败:", err);
     _isLocalWrite = false;
-    if (err.code === 'unavailable' || err.message?.includes('network')) {
+    if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
       setSyncStatus("offline", "⚠️ 离线模式");
     } else {
-      setSyncStatus("error", "⚠️ 同步失败，数据已保存到本地");
+      setSyncStatus("error", "同步失败，数据已保存到本地");
     }
     pendingSync = true;
   }
@@ -4237,18 +4271,18 @@ async function syncToFirestore(state) {
 async function loadFromFirestore() {
   if (!firebaseReady || !currentSyncHash) return null;
   try {
-    const ref = getFirestoreRef();
-    if (!ref) return null;
-    const doc = await ref.get();
-    if (doc.exists) {
-      const data = doc.data().data || null;
-      console.log('[loadFromFirestore] ✅ 读取成功, keys:', data ? Object.keys(data) : 'null');
-      return data;
+    const res = await fetch(_firestoreUrl());
+    if (!res.ok) {
+      if (res.status === 404) { console.log('[loadFromFirestore] 文档不存在'); return null; }
+      throw new Error('HTTP ' + res.status);
     }
-    console.log('[loadFromFirestore] 文档不存在');
-    return null;
+    const json = await res.json();
+    const fields = json?.fields?.data?.mapValue?.fields || null;
+    if (!fields) { console.log('[loadFromFirestore] 文档无数据'); return null; }
+    console.log('[loadFromFirestore] ✅ REST API 读取成功, keys:', Object.keys(fields));
+    return fields;
   } catch (err) {
-    console.warn("[loadFromFirestore] ❌ 读取失败:", err);
+    console.warn("[loadFromFirestore] ❌ REST API 读取失败:", err);
     return null;
   }
 }
