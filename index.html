@@ -6489,29 +6489,30 @@ function render() {
     });
   });
 
-  // Timeline toggle
-  main.querySelectorAll(".timeline-toggle").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const id = btn.dataset.card;
-      const pi = parseInt(btn.dataset.pos);
+  // Use event delegation for timeline and position buttons to fix tab switching issues
+  // Timeline toggle (event delegation)
+  main.addEventListener("click", (e) => {
+    const timelineToggle = e.target.closest(".timeline-toggle");
+    if (timelineToggle && main.contains(timelineToggle)) {
+      const id = timelineToggle.dataset.card;
+      const pi = parseInt(timelineToggle.dataset.pos);
       const tl = document.getElementById(`tl-${id}-${pi}`);
       if (tl) {
         tl.classList.toggle("open");
         if (tl.classList.contains("open")) {
-          btn.textContent = btn.textContent.replace("▾", "▴");
+          timelineToggle.textContent = timelineToggle.textContent.replace("▾", "▴");
         } else {
-          btn.textContent = btn.textContent.replace("▴", "▾");
+          timelineToggle.textContent = timelineToggle.textContent.replace("▴", "▾");
         }
       }
-    });
-  });
+    }
 
-  // Timeline date button → edit
-  main.querySelectorAll(".timeline-date-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const id = btn.dataset.card;
-      const pi = parseInt(btn.dataset.pos);
-      const ti = parseInt(btn.dataset.tl);
+    // Timeline date button → edit (event delegation)
+    const timelineDateBtn = e.target.closest(".timeline-date-btn");
+    if (timelineDateBtn && main.contains(timelineDateBtn)) {
+      const id = timelineDateBtn.dataset.card;
+      const pi = parseInt(timelineDateBtn.dataset.pos);
+      const ti = parseInt(timelineDateBtn.dataset.tl);
       const st = loadState();
       const entry = st[id]?.positions?.[pi]?.timeline?.[st[id].positions[pi].timeline.length - 1 - ti];
       if (entry) {
@@ -6525,15 +6526,14 @@ function render() {
           }
         });
       }
-    });
-  });
+    }
 
-  // Timeline remove button
-  main.querySelectorAll(".timeline-remove-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const id = btn.dataset.card;
-      const pi = parseInt(btn.dataset.pos);
-      const ti = parseInt(btn.dataset.tl);
+    // Timeline remove button (event delegation)
+    const timelineRemoveBtn = e.target.closest(".timeline-remove-btn");
+    if (timelineRemoveBtn && main.contains(timelineRemoveBtn)) {
+      const id = timelineRemoveBtn.dataset.card;
+      const pi = parseInt(timelineRemoveBtn.dataset.pos);
+      const ti = parseInt(timelineRemoveBtn.dataset.tl);
       const st = loadState();
       if (st[id]?.positions?.[pi]?.timeline) {
         const actualIdx = st[id].positions[pi].timeline.length - 1 - ti;
@@ -6541,21 +6541,20 @@ function render() {
         saveState(st);
         render();
       }
-    });
-  });
+    }
 
-  // Remove position button
-  main.querySelectorAll(".pos-remove-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const id = btn.dataset.card;
-      const pi = parseInt(btn.dataset.pos);
+    // Remove position button (event delegation)
+    const posRemoveBtn = e.target.closest(".pos-remove-btn");
+    if (posRemoveBtn && main.contains(posRemoveBtn)) {
+      const id = posRemoveBtn.dataset.card;
+      const pi = parseInt(posRemoveBtn.dataset.pos);
       const st = loadState();
       if (st[id]?.positions) {
         st[id].positions.splice(pi, 1);
         saveState(st);
         render();
       }
-    });
+    }
   });
 
   // Notes (debounced save for notes)
