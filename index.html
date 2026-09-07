@@ -3804,163 +3804,29 @@ function initMomoDefaults() {
   // 用户主动删除的公司，不再自动补回
   var deletedNames = state._deleted_companies || [];
 
+  // 只更新已有公司的metadata，不自动添加新公司
   MOMO_DEFAULTS.forEach(function(def) {
     var normalized = (def.company||'').replace(/\s/g,'').toLowerCase();
-    // 如果用户在黑名单里（主动删除过），跳过不补回
-    if (deletedNames.indexOf(normalized) !== -1 || deletedNames.indexOf(def.id) !== -1) {
-      return;
-    }
     if (existingNames.has(normalized)) {
-      // Update metadata (notice/note/priority/position/deadline) for existing momo companies
+      // Update metadata for existing companies
       var existing = state._custom_companies.find(function(c) {
         return (c.company||'').replace(/\s/g,'').toLowerCase() === normalized;
       });
       if (existing) {
-        // Update metadata for ALL matching companies (momo_ or user-added)
-        // Never overwrite user's progress data (positions/status/timeline)
         existing.notice = def.notice;
         existing.note = def.note;
         existing.priority = def.priority;
         existing.priLabel = def.priLabel;
         existing.position = def.position;
         existing.deadline = def.deadline;
-        // Only update links if currently empty or missing
         if (!existing.links || existing.links.length === 0) {
           existing.links = def.links;
         }
         updated++;
       }
-      return;
     }
-    existingNames.add(normalized);
-    state._custom_companies.push({
-      id: def.id, section: def.section, company: def.company,
-      position: def.position, location: def.location, deadline: def.deadline,
-      priority: def.priority, priLabel: def.priLabel, links: def.links,
-      notice: def.notice, note: def.note
-    });
-    if (!state[def.id]) state[def.id] = { positions: [], note: def.note };
-    added++;
+    // 不再自动添加新公司到用户列表
   });
-  
-  if (added > 0 || updated > 0) {
-    saveState(state);
-    console.log('[momoDefaults] injected ' + added + ' new, updated metadata for ' + updated + ' existing');
-  }
-}
-
-// ===== 去重逻辑：清理重复公司卡片（安全合并版） =====
-function deduplicateCompanies() {
-  const state = loadState();
-  if (!state._custom_companies || state._custom_companies.length === 0) return;
-  
-  const PRI_ORDER = { "high": 0, "mid": 1, "low": 2 };
-  const seen = new Map(); // normalized name -> { index, company }
-  const toRemove = []; // indices to remove
-  const mergeLog = []; // 记录合并操作
-  
-  state._custom_companies.forEach((c, idx) => {
-    const normalized = (c.company || '').replace(/\s/g, '').toLowerCase();
-    
-    if (seen.has(normalized)) {
-      // Duplicate found - decide which to keep
-      const existing = seen.get(normalized);
-      
-      // 实时读取两个项的进度数据
-      const existingState = state[existing.company.id] || { positions: [], note: '' };
-      const currentState = state[c.id] || { positions: [], note: '' };
-      const existingPosCount = (existingState.positions || []).length;
-      const currentPosCount = (currentState.positions || []).length;
-      
-      // Prefer: 1) momo_ ID, 2) more progress data, 3) higher priority, 4) earlier index
-      let keepExisting = true;
-      if (c.id.startsWith('momo_') && !existing.company.id.startsWith('momo_')) {
-        keepExisting = false; // Prefer momo_ ID
-      } else if (currentPosCount > existingPosCount) {
-        keepExisting = false; // Prefer more progress
-      } else if (currentPosCount === existingPosCount) {
-        const priA = PRI_ORDER[c.priority] ?? 1;
-        const priB = PRI_ORDER[existing.company.priority] ?? 1;
-        if (priA < priB) {
-          keepExisting = false; // Prefer higher priority (high=0 < mid=1 < low=2)
-        }
-      }
-      
-      if (keepExisting) {
-        // Merge current into existing
-        const targetId = existing.company.id;
-        const sourceId = c.id;
-        const targetState = state[targetId] || { positions: [], note: '' };
-        const sourceState = state[sourceId] || { positions: [], note: '' };
-        
-        // Merge positions (by name)
-        const targetPosNames = new Set((targetState.positions || []).map(p => p.name));
-        (sourceState.positions || []).forEach(p => {
-          if (!targetPosNames.has(p.name)) {
-            targetState.positions = targetState.positions || [];
-            targetState.positions.push(p);
-            mergeLog.push(`  岗位 "${p.name}" (${p.status}) 从 ${sourceId} 合并到 ${targetId}`);
-          }
-        });
-        
-        // Merge note (append if different)
-        if (sourceState.note && sourceState.note !== targetState.note) {
-          targetState.note = targetState.note ? targetState.note + '\n[合并] ' + sourceState.note : sourceState.note;
-          mergeLog.push(`  备注从 ${sourceId} 合并到 ${targetId}`);
-        }
-        
-        state[targetId] = targetState;
-        toRemove.push(idx);
-        console.log('[dedup] 合并并移除重复项:', c.company, '(', sourceId, '→', targetId, ')');
-      } else {
-        // Merge existing into current
-        const targetId = c.id;
-        const sourceId = existing.company.id;
-        const targetState = state[targetId] || { positions: [], note: '' };
-        const sourceState = state[sourceId] || { positions: [], note: '' };
-        
-        // Merge positions (by name)
-        const targetPosNames = new Set((targetState.positions || []).map(p => p.name));
-        (sourceState.positions || []).forEach(p => {
-          if (!targetPosNames.has(p.name)) {
-            targetState.positions = targetState.positions || [];
-            targetState.positions.push(p);
-            mergeLog.push(`  岗位 "${p.name}" (${p.status}) 从 ${sourceId} 合并到 ${targetId}`);
-          }
-        });
-        
-        // Merge note (append if different)
-        if (sourceState.note && sourceState.note !== targetState.note) {
-          targetState.note = targetState.note ? targetState.note + '\n[合并] ' + sourceState.note : sourceState.note;
-          mergeLog.push(`  备注从 ${sourceId} 合并到 ${targetId}`);
-        }
-        
-        state[targetId] = targetState;
-        toRemove.push(existing.index);
-        seen.set(normalized, { index: idx, company: c });
-        console.log('[dedup] 合并并移除重复项:', existing.company.company, '(', sourceId, '→', targetId, ')');
-      }
-    } else {
-      seen.set(normalized, { index: idx, company: c });
-    }
-  });
-  
-  if (toRemove.length > 0) {
-    if (mergeLog.length > 0) {
-      console.log('[dedup] 合并详情:\n' + mergeLog.join('\n'));
-    }
-    // Remove duplicates (sort indices descending to avoid shifting)
-    toRemove.sort((a, b) => b - a);
-    toRemove.forEach(idx => {
-      const removed = state._custom_companies.splice(idx, 1)[0];
-      delete state[removed.id]; // Clean up removed item's progress data
-    });
-    saveState(state);
-    console.log('[dedup] ✅ 去重完成，移除', toRemove.length, '个重复项');
-  } else {
-    console.log('[dedup] 未发现重复项');
-  }
-}
 
 const STORAGE_KEY = "job_checklist_v3";
 
