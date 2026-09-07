@@ -2755,33 +2755,29 @@ let firebaseCompanyData = null; // 存储从Firebase加载的公司数据
 
 async function loadCompanyDatabaseFromFirebase() {
   try {
-    console.log('[loadCompanyDatabase] 开始从Firebase加载公司数据库...');
-    const docRef = db.collection("system").doc("companyDatabase");
-    const docSnap = await docRef.get();
+    console.log('[loadCompanyDatabase] 开始从GitHub加载公司数据库...');
+    const response = await fetch('https://raw.githubusercontent.com/molulinlin/job-checklist/main/company_database.json');
     
-    if (docSnap.exists) {
-      const data = docSnap.data();
-      if (data && data.companies && Array.isArray(data.companies)) {
-        firebaseCompanyData = data.companies;
-        console.log('[loadCompanyDatabase] ✅ 成功加载', firebaseCompanyData.length, '条公司数据');
-        // 覆盖MOMO_DEFAULTS
-        if (firebaseCompanyData.length > 0) {
-          MOMO_DEFAULTS.length = 0; // 清空原数组
-          firebaseCompanyData.forEach(c => MOMO_DEFAULTS.push(c));
-          console.log('[loadCompanyDatabase] ✅ 已覆盖MOMO_DEFAULTS');
-        }
-        return true;
-      } else {
-        console.log('[loadCompanyDatabase] Firebase中无有效公司数据');
-        return false;
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data && data.companies && Array.isArray(data.companies)) {
+      firebaseCompanyData = data.companies;
+      console.log('[loadCompanyDatabase] ✅ 成功加载', firebaseCompanyData.length, '条公司数据');
+      // 覆盖MOMO_DEFAULTS
+      if (firebaseCompanyData.length > 0) {
+        MOMO_DEFAULTS.length = 0; // 清空原数组
+        firebaseCompanyData.forEach(c => MOMO_DEFAULTS.push(c));
+        console.log('[loadCompanyDatabase] ✅ 已覆盖MOMO_DEFAULTS');
       }
     } else {
-      console.log('[loadCompanyDatabase] Firebase中无companyDatabase文档');
-      return false;
+      console.log('[loadCompanyDatabase] GitHub数据格式无效');
     }
   } catch (err) {
     console.warn('[loadCompanyDatabase] 加载失败:', err);
-    return false;
   }
 }
 
@@ -3629,6 +3625,7 @@ const DATA = [
 
 // ===== MOMO 专属预填充数据（飞书校招文档 + 排名报告） =====
 const MOMO_DEFAULTS = [
+
 
 
     {id:'momo_湖北农发集团',section:'农业/食品',company:'湖北农发集团',position:'工程建设类岗位，市场营销类岗位，智慧农业类岗位，生产技术类岗位，粮油食品类岗位，职能管理类岗位',location:'河北, 湖北',deadline:'2026-05-08',priority:'high',priLabel:'⭐⭐⭐',links:[{text:'http://campus.51job.com/hbnyfzjt2026/m/job.html',url:'http://campus.51job.com/hbnyfzjt2026/m/job.html'}],notice:'省属国企,五险一金足额缴纳,定期体检,餐补,带薪年假,10万-15万/年',note:'春招·[\'农业\']'},
