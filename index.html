@@ -3740,6 +3740,9 @@ function initMomoDefaults() {
   const state = loadState();
   if (!state._custom_companies) state._custom_companies = [];
   
+  // 如果已经初始化过默认公司，不再重复注入（防止每次刷新都加入模板公司）
+  if (state._defaults_initialized) return;
+  
   const existingNames = new Set(state._custom_companies.map(c => (c.company||'').replace(/\s/g,'').toLowerCase()));
   let added = 0;
   let updated = 0;
@@ -3847,6 +3850,7 @@ function initMomoDefaults() {
   });
   
   if (added > 0 || updated > 0) {
+    state._defaults_initialized = true;
     saveState(state);
     console.log('[momoDefaults] injected ' + added + ' new, updated metadata for ' + updated + ' existing');
   }
@@ -6799,7 +6803,8 @@ async function initApp() {
         setSyncStatus("synced", "✅ 已同步");
         setupRealtimeListener();
         updateSyncCodeUI();
-        initMomoDefaults();
+        // 已有云端数据时不再注入默认模板公司，避免重复添加
+        if (!hasFirestoreData) initMomoDefaults();
         deduplicateCompanies();
         render();
       } catch (err) {
