@@ -3825,6 +3825,7 @@ function initMomoDefaults() {
   if (currentSyncHash !== MOMO_SYNC_HASH) return;
   
   const state = loadState();
+  if (state._custom_companies && !Array.isArray(state._custom_companies) && typeof state._custom_companies === 'object') state._custom_companies = Object.values(state._custom_companies);
   if (!state._custom_companies || !Array.isArray(state._custom_companies)) state._custom_companies = [];
   
   const existingNames = new Set(state._custom_companies.map(c => (c.company||'').replace(/\s/g,'').toLowerCase()));
@@ -3927,7 +3928,9 @@ function initMomoDefaults() {
 // ===== 去重逻辑：清理重复公司卡片（安全合并版） =====
 function deduplicateCompanies() {
   const state = loadState();
-  if (!state._custom_companies || state._custom_companies.length === 0) return;
+  const cc = Array.isArray(state._custom_companies) ? state._custom_companies : (state._custom_companies ? Object.values(state._custom_companies) : []);
+  if (!cc || cc.length === 0) return;
+  state._custom_companies = cc;  // Fix: ensure array
   
   const PRI_ORDER = { "high": 0, "mid": 1, "low": 2 };
   const seen = new Map(); // normalized name -> { index, company }
@@ -4330,6 +4333,11 @@ function _fromFirestoreValue(fv) {
   if ('mapValue' in fv) {
     const obj = {};
     Object.keys(fv.mapValue.fields || {}).forEach(k => { obj[k] = _fromFirestoreValue(fv.mapValue.fields[k]); });
+    // If all keys are numeric, this was likely stored as an array -> return as array
+    const keys = Object.keys(obj);
+    if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
+      return keys.sort((a,b) => parseInt(a)-parseInt(b)).map(k => obj[k]);
+    }
     return obj;
   }
   return null;
@@ -6143,7 +6151,7 @@ function classifyCompanyIntoIndustry(company, userIndustry) {
 
 // ===== Smart Sort =====
 function sortCompanies(state) {
-  const companies = state._custom_companies || [];
+  const companies = Array.isArray(state._custom_companies) ? state._custom_companies : (state._custom_companies ? Object.values(state._custom_companies) : []);
   if (companies.length <= 1) return companies;
 
   const STATUS_PRIORITY = { "Offer": 5, "HR面": 4, "三面": 4, "二面": 4, "一面": 4, "群面": 4, "笔试": 3, "已投递": 2 };
