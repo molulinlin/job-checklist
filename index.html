@@ -4372,7 +4372,8 @@ async function loadFromGist() {
       throw new Error('HTTP ' + res.status);
     }
     var data = await res.json();
-    if (!data || data._placeholder) { console.log('[loadFromGist] 无数据'); return null; }
+    if (!data) { console.log('[loadFromGist] 无数据'); return null; }
+    if (data._placeholder && !data._needs_migration) { console.log('[loadFromGist] 空占位'); return null; }
     console.log('[loadFromGist] ✅ Gist 读取成功, keys:', Object.keys(data).length);
     // === Firestore → Gist 一次性迁移 ===
     if (data._needs_migration) {
