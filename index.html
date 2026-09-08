@@ -3022,6 +3022,73 @@ function setupRealtimeListener() {
 // 拉取云端数据并对比 — 有差异时弹窗让用户决定
 let _pendingSyncData = null; // 暂存待同步的远程数据
 
+
+// ===== 深比较（忽略 key 顺序）=====
+function deepEqualIgnoreOrder(a, b) {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return false;
+  if (typeof a !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) { if (!deepEqualIgnoreOrder(a[i], b[i])) return false; }
+    return true;
+  }
+  const keysA = Object.keys(a).sort();
+  const keysB = Object.keys(b).sort();
+  if (keysA.length !== keysB.length) return false;
+  for (let i = 0; i < keysA.length; i++) {
+    if (keysA[i] !== keysB[i]) return false;
+    if (!deepEqualIgnoreOrder(a[keysA[i]], b[keysA[i]])) return false;
+  }
+  return true;
+}
+
+// ===== 智能合并两端数据 =====
+function mergeLocalAndRemote(local, remote) {
+  const merged = {};
+  const allKeys = new Set([...Object.keys(local), ...Object.keys(remote)]);
+  for (const key of allKeys) {
+    if (key.startsWith('_')) continue;
+    const lv = local[key], rv = remote[key];
+    if (!lv || typeof lv !== 'object') { merged[key] = rv || lv; continue; }
+    if (!rv || typeof rv !== 'object') { merged[key] = lv; continue; }
+    // Both exist — merge positions & note
+    merged[key] = {
+      positions: mergePositions(lv.positions || [], rv.positions || []),
+      note: (lv.note || '').length >= (rv.note || '').length ? (lv.note || '') : (rv.note || '')
+    };
+  }
+  // Merge _custom_companies (union by id)
+  const ccMap = new Map();
+  for (const c of (local._custom_companies || [])) ccMap.set(c.id, c);
+  for (const c of (remote._custom_companies || [])) { if (!ccMap.has(c.id)) ccMap.set(c.id, c); }
+  merged._custom_companies = Array.from(ccMap.values());
+  // Merge _deleted_companies (union)
+  merged._deleted_companies = [...new Set([...(local._deleted_companies || []), ...(remote._deleted_companies || [])])];
+  return merged;
+}
+
+function mergePositions(localPos, remotePos) {
+  const posMap = new Map();
+  for (const p of localPos) posMap.set(p.name, JSON.parse(JSON.stringify(p)));
+  const statusRank = { '未投递': 0, '已投递': 1, '笔试': 2, '面试': 3, 'offer': 4, '已拒绝': 5 };
+  for (const p of remotePos) {
+    if (!posMap.has(p.name)) { posMap.set(p.name, JSON.parse(JSON.stringify(p))); continue; }
+    const ex = posMap.get(p.name);
+    // Merge timeline (union by time string)
+    const tlMap = new Map();
+    for (const t of (ex.timeline || [])) tlMap.set(t.time || JSON.stringify(t), t);
+    for (const t of (p.timeline || [])) tlMap.set(t.time || JSON.stringify(t), t);
+    ex.timeline = Array.from(tlMap.values());
+    // Status: prefer more advanced
+    if ((statusRank[p.status] || 0) > (statusRank[ex.status] || 0)) ex.status = p.status;
+    // Note: prefer longer
+    if ((p.note || '').length > (ex.note || '').length) ex.note = p.note;
+  }
+  return Array.from(posMap.values());
+}
+
 async function pollRemoteSync() {
   if (!currentSyncHash || !firebaseReady) return;
 
@@ -3035,15 +3102,20 @@ async function pollRemoteSync() {
     const remoteData = json?.fields?.data?.mapValue?.fields || null;
     if (remoteData) {
       const localData = loadStateFromLocal();
-      const remoteJson = JSON.stringify(remoteData);
-      const localJson = JSON.stringify(localData);
       console.log('[pollSync] REST API 拉取, 本地keys:', Object.keys(localData).filter(k => !k.startsWith('_')), ', 远程keys:', Object.keys(remoteData).filter(k => !k.startsWith('_')));
-      if (remoteJson !== localJson) {
-        console.log('[pollSync] 检测到数据差异，弹窗让用户决定');
-        _pendingSyncData = remoteData;
-        showSyncConflictModal();
+      const remoteConverted = convertFirestoreDataToLocal(remoteData);
+      if (deepEqualIgnoreOrder(localData, remoteConverted)) {
+        console.log('[pollSync] 数据一致（忽略顺序），无需更新');
       } else {
-        console.log('[pollSync] 数据一致，无需更新');
+        console.log('[pollSync] 检测到数据差异，自动合并两端数据');
+        const merged = mergeLocalAndRemote(localData, remoteConverted);
+        saveStateToLocal(merged);
+        initMomoDefaults();
+        deduplicateCompanies();
+        setSyncStatus("synced", "已合并两端数据");
+        render();
+        // 静默推送合并结果到远程
+        syncToFirestore(merged).catch(e => console.warn('[pollSync] 合并后同步远程失败:', e));
       }
     } else {
       console.log('[pollSync] 远程文档无数据');
