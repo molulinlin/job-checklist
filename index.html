@@ -4387,8 +4387,8 @@ async function loadFromGist() {
           var fsJson = await fsRes.json();
           var fsFields = fsJson && fsJson.fields && fsJson.fields.data && fsJson.fields.data.mapValue && fsJson.fields.data.mapValue.fields || null;
           if (fsFields) {
-            var converted = _fromFirestoreValue({mapValue:{fields:fsFields}}) || fsFields;
-            var localConverted = convertFirestoreDataToLocal(converted);
+            function _deepUnwrap(v){if(!v||typeof v!=='object')return v;if('stringValue' in v)return v.stringValue;if('integerValue' in v)return parseInt(v.integerValue);if('doubleValue' in v)return v.doubleValue;if('booleanValue' in v)return v.booleanValue;if('nullValue' in v)return null;if('timestampValue' in v)return new Date(v.timestampValue).getTime();if('arrayValue' in v)return(v.arrayValue.values||[]).map(_deepUnwrap);if('mapValue' in v){var o={};Object.keys(v.mapValue.fields||{}).forEach(function(k){o[k]=_deepUnwrap(v.mapValue.fields[k])});return o}var r={};Object.keys(v).forEach(function(k){r[k]=_deepUnwrap(v[k])});return r}
+            var localConverted = convertFirestoreDataToLocal(_deepUnwrap({mapValue:{fields:fsFields}}));
             delete localConverted._needs_migration;
             await syncToGist(localConverted);
             console.log('[loadFromGist] ✅ Firestore 数据已迁移到 Gist');
