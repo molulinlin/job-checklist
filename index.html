@@ -3107,15 +3107,9 @@ async function pollRemoteSync() {
       if (deepEqualIgnoreOrder(localData, remoteConverted)) {
         console.log('[pollSync] 数据一致（忽略顺序），无需更新');
       } else {
-        console.log('[pollSync] 检测到数据差异，自动合并两端数据');
-        const merged = mergeLocalAndRemote(localData, remoteConverted);
-        saveStateToLocal(merged);
-        initMomoDefaults();
-        deduplicateCompanies();
-        setSyncStatus("synced", "已合并两端数据");
-        render();
-        // 静默推送合并结果到远程
-        syncToFirestore(merged).catch(e => console.warn('[pollSync] 合并后同步远程失败:', e));
+        console.log('[pollSync] 检测到数据差异，弹窗让用户决定');
+        _pendingSyncData = remoteData;
+        showSyncConflictModal();
       }
     } else {
       console.log('[pollSync] 远程文档无数据');
@@ -3174,6 +3168,21 @@ async function syncKeepLocal() {
   const localData = loadStateFromLocal();
   await syncToFirestore(localData);
   setSyncStatus("synced", "✅ 已保留本地数据并上传云端");
+  closeSyncConflictModal();
+}
+
+// 合并两端数据（本地 + 远程）
+function syncMergeBoth() {
+  if (!_pendingSyncData) { closeSyncConflictModal(); return; }
+  const localData = loadStateFromLocal();
+  const converted = convertFirestoreDataToLocal(_pendingSyncData);
+  const merged = mergeLocalAndRemote(localData, converted);
+  saveStateToLocal(merged);
+  initMomoDefaults();
+  deduplicateCompanies();
+  setSyncStatus("synced", "已合并两端数据");
+  render();
+  syncToFirestore(merged).catch(e => console.warn('[syncMergeBoth] 同步远程失败:', e));
   closeSyncConflictModal();
 }
 
@@ -7098,7 +7107,7 @@ window.addEventListener("offline", () => {
     <div class="modal-title">⚡ 检测到数据差异</div>
     <div class="modal-desc" style="color:#555;line-height:1.6;margin:12px 0 20px">
       云端数据与本地数据不一致，请选择操作：<br>
-      <span style="font-size:12px;color:#999">（每5分钟检测一次，不影响正常使用）</span>
+      <span style="font-size:12px;color:#999">合并模式会取两端最新数据智能合并（推荐）</span>
     </div>
     <div style="display:flex;flex-direction:column;gap:10px">
       <button class="modal-btn modal-btn-primary" onclick="syncUseRemote()" style="width:100%;text-align:left;padding:12px 16px">
@@ -7107,6 +7116,8 @@ window.addEventListener("offline", () => {
       <button class="modal-btn modal-btn-primary" onclick="syncKeepLocal()" style="width:100%;text-align:left;padding:12px 16px;background:#4a6fa5;border-color:#4a6fa5">
         📤 保留本地数据，上传覆盖云端
       </button>
+      <button class="modal-btn modal-btn-primary" onclick="syncMergeBoth()" style="width:100%;text-align:left;padding:12px 16px;background:#2e7d32;border-color:#2e7d32">
+        🟢 合并两端数据（推荐）</button>
       <button class="modal-btn" onclick="syncDismiss()" style="width:100%;text-align:left;padding:12px 16px">
         ⏸️ 暂时跳过，下次再提醒
       </button>
