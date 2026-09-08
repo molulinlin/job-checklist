@@ -8580,12 +8580,30 @@ function getCompanyTabs(companyName, companyId) {
   // 4. 如果还是没有标签，尝试使用公司自带的 section
   if (tabArr.length > 0) return tabArr;
   
-  // 从 _custom_companies 获取 section
+  // 从 _custom_companies 获取 section，并映射到 REFERRAL_TAG_GROUPS 中的标签
   if (companyId) {
     const st = loadState();
     const companyData = (st._custom_companies || []).find(function(c) { return c.id === companyId; });
     if (companyData && companyData.section && companyData.section !== '其他') {
-      return [companyData.section];
+      // 尝试将 section 映射到 REFERRAL_TAG_GROUPS 中的标签
+      const sec = companyData.section;
+      const tagGroupKeys = Object.keys(REFERRAL_TAG_GROUPS);
+      for (var i = 0; i < tagGroupKeys.length; i++) {
+        var tabName = tagGroupKeys[i];
+        var tagList = REFERRAL_TAG_GROUPS[tabName];
+        // 如果 section 在关键词列表中，返回对应的标签名
+        if (tagList.indexOf(sec) !== -1) {
+          return [tabName];
+        }
+        // 如果 section 包含关键词（模糊匹配）
+        for (var j = 0; j < tagList.length; j++) {
+          if (sec.indexOf(tagList[j]) !== -1 || tagList[j].indexOf(sec) !== -1) {
+            return [tabName];
+          }
+        }
+      }
+      // 没有匹配到任何标签，使用原始 section
+      return [sec];
     }
   }
   
