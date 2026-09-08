@@ -3738,7 +3738,7 @@ function initMomoDefaults() {
   if (currentSyncHash !== MOMO_SYNC_HASH) return;
   
   const state = loadState();
-  if (!state._custom_companies) state._custom_companies = [];
+  if (!state._custom_companies || !Array.isArray(state._custom_companies)) state._custom_companies = [];
   
   const existingNames = new Set(state._custom_companies.map(c => (c.company||'').replace(/\s/g,'').toLowerCase()));
   let added = 0;
