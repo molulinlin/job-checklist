@@ -8298,6 +8298,10 @@ window.addEventListener("offline", () => {
       if (sec.items) sec.items.forEach(item => { keyToName[item.id] = item.company; });
     });
     const converted = JSON.parse(JSON.stringify(firestoreData));
+    // Defense: if _custom_companies exists but is an object (not array), convert it
+    if (converted._custom_companies && typeof converted._custom_companies === 'object' && !Array.isArray(converted._custom_companies)) {
+      converted._custom_companies = Object.values(converted._custom_companies);
+    }
     if (!converted._custom_companies) {
       converted._custom_companies = [];
       Object.keys(firestoreData).forEach(key => {
