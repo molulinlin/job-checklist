@@ -2908,16 +2908,20 @@ async function bindSyncCodeUI() {
     currentSyncHash = hash;
     currentSyncCode = code;
 
-    // Check if Firestore already has data for this sync code
+    // Check if Firestore already has data for this sync code (REST API)
     let firestoreData = null;
     try {
-      const ref = getFirestoreRef();
-      const doc = await ref.get();
-      if (doc.exists && doc.data().data) {
-        firestoreData = doc.data().data;
-        console.log('[bindSyncCodeUI] Firestore 有数据, keys:', Object.keys(firestoreData));
+      const res = await fetch(_firestoreUrl());
+      if (res.ok) {
+        const json = await res.json();
+        firestoreData = json?.fields?.data?.mapValue?.fields || null;
+        if (firestoreData) {
+          console.log('[bindSyncCodeUI] Firestore 有数据, keys:', Object.keys(firestoreData));
+        } else {
+          console.log('[bindSyncCodeUI] Firestore 无数据');
+        }
       } else {
-        console.log('[bindSyncCodeUI] Firestore 无数据');
+        console.log('[bindSyncCodeUI] Firestore 请求失败:', res.status);
       }
     } catch (e) {
       console.warn("[bindSyncCodeUI] 检查 Firestore 数据失败:", e);
