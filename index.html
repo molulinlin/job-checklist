@@ -4060,13 +4060,19 @@ function getPasswordConfigRef(hash) {
 async function checkSyncCodePassword(hash) {
   // Returns: { required: bool, verified: bool }
   try {
-    const ref = getPasswordConfigRef(hash);
-    if (!ref) return { required: false, verified: true };
-    const doc = await ref.get();
-    if (!doc.exists || !doc.data().passwordHash) {
+    // REST API 读取密码配置
+    const pwdUrl = `https://firestore.googleapis.com/v1/projects/find-job---checklist/databases/(default)/documents/sync_codes/${hash}/config/password?key=AIzaSyAgNy37pCBs_TykOJFxphFqUSiqruhajEc`;
+    const res = await fetch(pwdUrl);
+    let storedHash = null;
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.fields?.passwordHash?.stringValue) {
+        storedHash = json.fields.passwordHash.stringValue;
+      }
+    }
+    if (!storedHash) {
       return { required: false, verified: true };
     }
-    const storedHash = doc.data().passwordHash;
     // Prompt user for password using custom modal
     let attempts = 0;
     while (attempts < 3) {
@@ -4190,11 +4196,19 @@ async function updatePasswordStatus() {
   const statusEl = document.getElementById('syncPasswordStatus');
   if (!statusEl || !currentSyncHash) return;
   try {
-    const ref = getPasswordConfigRef();
-    const doc = await ref.get();
-    if (doc.exists && doc.data().passwordHash) {
-      statusEl.textContent = '已开启 🔐';
-      statusEl.style.color = '#1e7a1e';
+    // REST API 读取密码配置
+    const pwdUrl = `https://firestore.googleapis.com/v1/projects/find-job---checklist/databases/(default)/documents/sync_codes/${currentSyncHash}/config/password?key=AIzaSyAgNy37pCBs_TykOJFxphFqUSiqruhajEc`;
+    const res = await fetch(pwdUrl);
+    if (res.ok) {
+      const json = await res.json();
+      const hasHash = json?.fields?.passwordHash !== undefined;
+      if (hasHash) {
+        statusEl.textContent = '已开启 ';
+        statusEl.style.color = '#1e7a1e';
+      } else {
+        statusEl.textContent = '未设置';
+        statusEl.style.color = 'var(--text-secondary)';
+      }
     } else {
       statusEl.textContent = '未设置';
       statusEl.style.color = 'var(--text-secondary)';
