@@ -6539,78 +6539,74 @@ function render() {
     });
   });
 
-  // Use event delegation for timeline and position buttons to fix tab switching issues
-  // Only bind once to prevent duplicate event listeners
-  if (!_mainEventDelegationBound) {
-    _mainEventDelegationBound = true;
-    
-    // Timeline toggle (event delegation)
-    main.addEventListener("click", (e) => {
-      const timelineToggle = e.target.closest(".timeline-toggle");
-      if (timelineToggle && main.contains(timelineToggle)) {
-        const id = timelineToggle.dataset.card;
-        const pi = parseInt(timelineToggle.dataset.pos);
-        const tl = document.getElementById(`tl-${id}-${pi}`);
-        if (tl) {
-          tl.classList.toggle("open");
-          if (tl.classList.contains("open")) {
-            timelineToggle.textContent = timelineToggle.textContent.replace("▾", "▴");
-          } else {
-            timelineToggle.textContent = timelineToggle.textContent.replace("▴", "▾");
-          }
-        }
-      }
-
-      // Timeline date button → edit (event delegation)
-      const timelineDateBtn = e.target.closest(".timeline-date-btn");
-      if (timelineDateBtn && main.contains(timelineDateBtn)) {
-        const id = timelineDateBtn.dataset.card;
-        const pi = parseInt(timelineDateBtn.dataset.pos);
-        const ti = parseInt(timelineDateBtn.dataset.tl);
-        const st = loadState();
-        const entry = st[id]?.positions?.[pi]?.timeline?.[st[id].positions[pi].timeline.length - 1 - ti];
-        if (entry) {
-          openDateModal(entry.date, (newDate) => {
-            const st2 = loadState();
-            const entry2 = st2[id]?.positions?.[pi]?.timeline?.[st2[id].positions[pi].timeline.length - 1 - ti];
-            if (entry2) {
-              entry2.date = newDate;
-              saveState(st2);
-              render();
-            }
-          });
-        }
-      }
-
-      // Timeline remove button (event delegation)
-      const timelineRemoveBtn = e.target.closest(".timeline-remove-btn");
-      if (timelineRemoveBtn && main.contains(timelineRemoveBtn)) {
-        const id = timelineRemoveBtn.dataset.card;
-        const pi = parseInt(timelineRemoveBtn.dataset.pos);
-        const ti = parseInt(timelineRemoveBtn.dataset.tl);
-        const st = loadState();
-        if (st[id]?.positions?.[pi]?.timeline) {
-          const actualIdx = st[id].positions[pi].timeline.length - 1 - ti;
-          st[id].positions[pi].timeline.splice(actualIdx, 1);
-          saveState(st);
-          render();
-        }
-      }
-
-      // Remove position button (event delegation)
-      const posRemoveBtn = e.target.closest(".pos-remove-btn");
-      if (posRemoveBtn && main.contains(posRemoveBtn)) {
-        const id = posRemoveBtn.dataset.card;
-        const pi = parseInt(posRemoveBtn.dataset.pos);
-        const st = loadState();
-        if (st[id]?.positions) {
-          st[id].positions.splice(pi, 1);
-          saveState(st);
-          render();
+  // Timeline toggle (direct binding - works on all tabs)
+  main.querySelectorAll(".timeline-toggle").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.card;
+      const pi = parseInt(btn.dataset.pos);
+      const tl = document.getElementById(`tl-${id}-${pi}`);
+      if (tl) {
+        tl.classList.toggle("open");
+        if (tl.classList.contains("open")) {
+          btn.textContent = btn.textContent.replace("\u25be", "\u25b4");
+        } else {
+          btn.textContent = btn.textContent.replace("\u25b4", "\u25be");
         }
       }
     });
-  }
+  });
+
+  // Timeline date button → edit (direct binding)
+  main.querySelectorAll(".timeline-date-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.card;
+      const pi = parseInt(btn.dataset.pos);
+      const ti = parseInt(btn.dataset.tl);
+      const st = loadState();
+      const entry = st[id]?.positions?.[pi]?.timeline?.[st[id].positions[pi].timeline.length - 1 - ti];
+      if (entry) {
+        openDateModal(entry.date, (newDate) => {
+          const st2 = loadState();
+          const entry2 = st2[id]?.positions?.[pi]?.timeline?.[st2[id].positions[pi].timeline.length - 1 - ti];
+          if (entry2) {
+            entry2.date = newDate;
+            saveState(st2);
+            render();
+          }
+        });
+      }
+    });
+  });
+
+  // Timeline remove button (direct binding)
+  main.querySelectorAll(".timeline-remove-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.card;
+      const pi = parseInt(btn.dataset.pos);
+      const ti = parseInt(btn.dataset.tl);
+      const st = loadState();
+      if (st[id]?.positions?.[pi]?.timeline) {
+        const actualIdx = st[id].positions[pi].timeline.length - 1 - ti;
+        st[id].positions[pi].timeline.splice(actualIdx, 1);
+        saveState(st);
+        render();
+      }
+    });
+  });
+
+  // Remove position button (direct binding)
+  main.querySelectorAll(".pos-remove-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.card;
+      const pi = parseInt(btn.dataset.pos);
+      const st = loadState();
+      if (st[id]?.positions) {
+        st[id].positions.splice(pi, 1);
+        saveState(st);
+        render();
+      }
+    });
+  });
 
   // Notes (debounced save for notes)
   let _noteTimer = null;
