@@ -122,7 +122,27 @@ async function migrate() {
     log(`Firestore 读取成功，${Object.keys(fsFields).length} 个字段`, 'ok');
 
     // Step 2: Convert
-    const plainData = fromFirestoreValue({ mapValue: { fields: fsFields } });
+    // fsFields 是 Firestore mapValue.fields，需要递归解包每个值
+    function deepUnwrap(val) {
+      if (!val || typeof val !== 'object') return val;
+      if ('stringValue' in val) return val.stringValue;
+      if ('integerValue' in val) return parseInt(val.integerValue);
+      if ('doubleValue' in val) return val.doubleValue;
+      if ('booleanValue' in val) return val.booleanValue;
+      if ('nullValue' in val) return null;
+      if ('timestampValue' in val) return new Date(val.timestampValue).getTime();
+      if ('arrayValue' in val) return (val.arrayValue.values || []).map(deepUnwrap);
+      if ('mapValue' in val) {
+        const obj = {};
+        for (const k of Object.keys(val.mapValue.fields || {})) obj[k] = deepUnwrap(val.mapValue.fields[k]);
+        return obj;
+      }
+      // fallback: if it's already a plain key-value map, recurse into each value
+      const result = {};
+      for (const k of Object.keys(val)) result[k] = deepUnwrap(val[k]);
+      return result;
+    }
+    const plainData = deepUnwrap({ mapValue: { fields: fsFields } });
     log(`转换为普通对象: ${Object.keys(plainData).length} 个键`, 'info');
     const localData = convertFirestoreDataToLocal(plainData);
     delete localData._needs_migration;
