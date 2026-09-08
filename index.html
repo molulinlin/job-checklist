@@ -4377,7 +4377,38 @@ async function loadFromGist() {
     if (!data) { console.log('[loadFromGist] 无数据'); return null; }
     if (data._placeholder && !data._needs_migration) { console.log('[loadFromGist] 空占位'); return null; }
     console.log('[loadFromGist] ✅ Gist 读取成功, keys:', Object.keys(data).length);
-    // === Firestore → Gist 一次性迁移 ===
+
+    // === 自动检测并转换 Firestore 格式数据 ===
+    // 如果 Gist 数据包含 Firestore 包装（mapValue/stringValue），递归解包
+    function _isFirestoreFormat(v) {
+      if (!v || typeof v !== 'object') return false;
+      if ('mapValue' in v || 'stringValue' in v || 'arrayValue' in v) return true;
+      return Object.values(v).some(val => _isFirestoreFormat(val));
+    }
+    function _deepUnwrap(v) {
+      if (!v || typeof v !== 'object') return v;
+      if ('stringValue' in v) return v.stringValue;
+      if ('integerValue' in v) return parseInt(v.integerValue);
+      if ('doubleValue' in v) return v.doubleValue;
+      if ('booleanValue' in v) return v.booleanValue;
+      if ('nullValue' in v) return null;
+      if ('timestampValue' in v) return new Date(v.timestampValue).getTime();
+      if ('arrayValue' in v) return (v.arrayValue.values || []).map(_deepUnwrap);
+      if ('mapValue' in v) {
+        var o = {};
+        Object.keys(v.mapValue.fields || {}).forEach(function(k) { o[k] = _deepUnwrap(v.mapValue.fields[k]); });
+        return o;
+      }
+      var r = {};
+      Object.keys(v).forEach(function(k) { r[k] = _deepUnwrap(v[k]); });
+      return r;
+    }
+    if (_isFirestoreFormat(data)) {
+      console.log('[loadFromGist] 🔄 检测到 Gist 数据为 Firestore 格式，自动转换...');
+      data = _deepUnwrap(data);
+    }
+
+    // === Firestore → Gist 一次性迁移（首次绑定时触发）===
     if (data._needs_migration) {
       console.log('[loadFromGist] 🔄 检测到迁移标记，从 Firestore 恢复...');
       try {
@@ -4387,7 +4418,6 @@ async function loadFromGist() {
           var fsJson = await fsRes.json();
           var fsFields = fsJson && fsJson.fields && fsJson.fields.data && fsJson.fields.data.mapValue && fsJson.fields.data.mapValue.fields || null;
           if (fsFields) {
-            function _deepUnwrap(v){if(!v||typeof v!=='object')return v;if('stringValue' in v)return v.stringValue;if('integerValue' in v)return parseInt(v.integerValue);if('doubleValue' in v)return v.doubleValue;if('booleanValue' in v)return v.booleanValue;if('nullValue' in v)return null;if('timestampValue' in v)return new Date(v.timestampValue).getTime();if('arrayValue' in v)return(v.arrayValue.values||[]).map(_deepUnwrap);if('mapValue' in v){var o={};Object.keys(v.mapValue.fields||{}).forEach(function(k){o[k]=_deepUnwrap(v.mapValue.fields[k])});return o}var r={};Object.keys(v).forEach(function(k){r[k]=_deepUnwrap(v[k])});return r}
             var localConverted = convertFirestoreDataToLocal(_deepUnwrap({mapValue:{fields:fsFields}}));
             delete localConverted._needs_migration;
             await syncToGist(localConverted);
@@ -8305,9 +8335,25 @@ window.addEventListener("offline", () => {
       if (sec.items) sec.items.forEach(item => { keyToName[item.id] = item.company; });
     });
     const converted = JSON.parse(JSON.stringify(firestoreData));
-    // Defense: if _custom_companies exists but is an object (not array), convert it
+    // Defense 1: if _custom_companies is Firestore mapValue format, unwrap it
+    if (converted._custom_companies && converted._custom_companies.mapValue) {
+      var arr = converted._custom_companies.mapValue.fields || {};
+      if (typeof arr === 'object' && !Array.isArray(arr)) {
+        arr = Object.values(arr).map(v => v.fields || v);
+      }
+      converted._custom_companies = arr;
+    }
+    // Defense 2: if _custom_companies is an object (not array), convert it
     if (converted._custom_companies && typeof converted._custom_companies === 'object' && !Array.isArray(converted._custom_companies)) {
       converted._custom_companies = Object.values(converted._custom_companies);
+    }
+    // Defense 3: if _custom_companies entries still have Firestore wrappers, unwrap each
+    if (Array.isArray(converted._custom_companies)) {
+      converted._custom_companies = converted._custom_companies.map(function(item) {
+        if (item && item.mapValue && item.mapValue.fields) return item.mapValue.fields;
+        if (item && typeof item === 'object' && item.stringValue !== undefined) return { company: item.stringValue };
+        return item;
+      });
     }
     if (!converted._custom_companies) {
       converted._custom_companies = [];
@@ -8315,7 +8361,10 @@ window.addEventListener("offline", () => {
         if (key.startsWith('_')) return;
         const entry = firestoreData[key];
         if (!entry || typeof entry !== 'object') return;
-        if (!entry.positions && !entry.note) return;
+        // Handle Firestore format entries
+        var entryObj = entry;
+        if (entry.mapValue && entry.mapValue.fields) entryObj = entry.mapValue.fields;
+        if (!entryObj.positions && !entryObj.note) return;
         const displayName = keyToName[key] || key;
         converted._custom_companies.push({
           id: key, section: '游戏', company: displayName, priority: 'mid'
