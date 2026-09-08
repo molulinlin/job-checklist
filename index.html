@@ -2915,6 +2915,7 @@ async function bindSyncCodeUI() {
       if (res.ok) {
         const json = await res.json();
         firestoreData = json?.fields?.data?.mapValue?.fields || null;
+        if (firestoreData) firestoreData = _fromFirestoreValue({mapValue:{fields:firestoreData}}) || firestoreData;
         if (firestoreData) {
           console.log('[bindSyncCodeUI] Firestore 有数据, keys:', Object.keys(firestoreData));
         } else {
@@ -3104,15 +3105,16 @@ async function pollRemoteSync() {
     }
     const json = await res.json();
     const remoteData = json?.fields?.data?.mapValue?.fields || null;
+    const remoteDataConverted = remoteData ? (_fromFirestoreValue({mapValue:{fields:remoteData}}) || remoteData) : null;
     if (remoteData) {
       const localData = loadStateFromLocal();
       console.log('[pollSync] REST API 拉取, 本地keys:', Object.keys(localData).filter(k => !k.startsWith('_')), ', 远程keys:', Object.keys(remoteData).filter(k => !k.startsWith('_')));
-      const remoteConverted = convertFirestoreDataToLocal(remoteData);
+      const remoteConverted = convertFirestoreDataToLocal(remoteDataConverted);
       if (deepEqualIgnoreOrder(localData, remoteConverted)) {
         console.log('[pollSync] 数据一致（忽略顺序），无需更新');
       } else {
         console.log('[pollSync] 检测到数据差异，弹窗让用户决定');
-        _pendingSyncData = remoteData;
+        _pendingSyncData = remoteDataConverted;
         showSyncConflictModal();
       }
     } else {
@@ -4378,8 +4380,9 @@ async function loadFromFirestore() {
     const json = await res.json();
     const fields = json?.fields?.data?.mapValue?.fields || null;
     if (!fields) { console.log('[loadFromFirestore] 文档无数据'); return null; }
-    console.log('[loadFromFirestore] ✅ REST API 读取成功, keys:', Object.keys(fields));
-    return fields;
+    const converted = _fromFirestoreValue({mapValue:{fields}}) || fields;
+    console.log('[loadFromFirestore] ✅ REST API 读取成功, keys:', Object.keys(converted));
+    return converted;
   } catch (err) {
     console.warn("[loadFromFirestore] ❌ REST API 读取失败:", err);
     return null;
