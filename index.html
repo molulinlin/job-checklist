@@ -2908,24 +2908,22 @@ async function bindSyncCodeUI() {
     currentSyncHash = hash;
     currentSyncCode = code;
 
-    // Check if Firestore already has data for this sync code (REST API)
+    // Gist 同步：首次绑定时提示输入 token
+    if (!localStorage.getItem('gist_token')) {
+      var token = prompt("首次使用 Gist 同步，请输入 GitHub Token（仅存储在本地）：\n\n获取方法：GitHub Settings > Developer settings > Personal access tokens > 勾选 gist 权限");
+      if (!token) { btn.disabled = false; btn.textContent = '绑定同步码'; setSyncStatus('initial', '已取消'); return; }
+      localStorage.setItem('gist_token', token);
+    }
     let firestoreData = null;
     try {
-      const res = await fetch(_firestoreUrl());
-      if (res.ok) {
-        const json = await res.json();
-        firestoreData = json?.fields?.data?.mapValue?.fields || null;
-        if (firestoreData) firestoreData = _fromFirestoreValue({mapValue:{fields:firestoreData}}) || firestoreData;
-        if (firestoreData) {
-          console.log('[bindSyncCodeUI] Firestore 有数据, keys:', Object.keys(firestoreData));
-        } else {
-          console.log('[bindSyncCodeUI] Firestore 无数据');
-        }
+      firestoreData = await loadFromGist();
+      if (firestoreData) {
+        console.log('[bindSyncCodeUI] Gist 有数据, keys:', Object.keys(firestoreData));
       } else {
-        console.log('[bindSyncCodeUI] Firestore 请求失败:', res.status);
+        console.log('[bindSyncCodeUI] Gist 无数据');
       }
     } catch (e) {
-      console.warn("[bindSyncCodeUI] 检查 Firestore 数据失败:", e);
+      console.warn("[bindSyncCodeUI] 检查 Gist 数据失败:", e);
     }
 
     const localData = loadStateFromLocal();
@@ -2938,7 +2936,7 @@ async function bindSyncCodeUI() {
       // 本地有数据但云端无数据：询问用户是否上传本地数据
       const uploadLocal = confirm("当前同步码没有云端数据。\n\n是否将本地数据上传到云端？\n\n点击「确定」上传本地数据\n点击「取消」清空本地数据，从空白开始");
       if (uploadLocal) {
-        await syncToFirestore(localData);
+        await syncToGist(localData);
         setSyncStatus("synced", "✅ 本地数据已上传到云端");
       } else {
         // 清空本地数据
@@ -2954,7 +2952,7 @@ async function bindSyncCodeUI() {
         setSyncStatus("synced", "✅ 已从云端同步");
       } else {
         // Upload local to cloud
-        await syncToFirestore(localData);
+        await syncToGist(localData);
         setSyncStatus("synced", "✅ 本地数据已上传到云端");
       }
     } else if (hasFirestoreData) {
@@ -2963,7 +2961,8 @@ async function bindSyncCodeUI() {
       initMomoDefaults();
       setSyncStatus("synced", "✅ 已从云端同步");
     } else {
-      // Both empty
+      // Both empty - init Gist with migration placeholder
+      await syncToGist({_placeholder: true, _needs_migration: true});
       setSyncStatus("synced", "✅ 同步码已绑定");
     }
 
@@ -3095,20 +3094,13 @@ function mergePositions(localPos, remotePos) {
 }
 
 async function pollRemoteSync() {
-  if (!currentSyncHash || !firebaseReady) return;
+  if (!currentSyncHash) return;
 
   try {
-    const res = await fetch(_firestoreUrl());
-    if (!res.ok) {
-      if (res.status === 404) { console.log('[pollSync] 远程文档不存在'); return; }
-      throw new Error('HTTP ' + res.status);
-    }
-    const json = await res.json();
-    const remoteData = json?.fields?.data?.mapValue?.fields || null;
-    const remoteDataConverted = remoteData ? (_fromFirestoreValue({mapValue:{fields:remoteData}}) || remoteData) : null;
-    if (remoteData) {
+    const remoteDataConverted = await loadFromGist();
+    if (remoteDataConverted) {
       const localData = loadStateFromLocal();
-      console.log('[pollSync] REST API 拉取, 本地keys:', Object.keys(localData).filter(k => !k.startsWith('_')), ', 远程keys:', Object.keys(remoteData).filter(k => !k.startsWith('_')));
+      console.log('[pollSync] Gist 拉取, 本地keys:', Object.keys(localData).filter(k => !k.startsWith('_')), ', 远程keys:', Object.keys(remoteDataConverted).filter(k => !k.startsWith('_')));
       const remoteConverted = convertFirestoreDataToLocal(remoteDataConverted);
       if (deepEqualIgnoreOrder(localData, remoteConverted)) {
         console.log('[pollSync] 数据一致（忽略顺序），无需更新');
@@ -3121,7 +3113,7 @@ async function pollRemoteSync() {
       console.log('[pollSync] 远程文档无数据');
     }
   } catch (err) {
-    console.warn("[pollSync] REST API 拉取失败:", err);
+    console.warn("[pollSync] Gist 拉取失败:", err);
     setSyncStatus("error", "⚠️ 同步失败，下次轮询重试");
   }
 }
@@ -3172,7 +3164,7 @@ function syncUseRemote() {
 async function syncKeepLocal() {
   if (!confirm("⚠️ 确定要保留本地数据并覆盖云端吗？\n\n云端当前的数据将被本地数据替换。")) return;
   const localData = loadStateFromLocal();
-  await syncToFirestore(localData);
+  await syncToGist(localData);
   setSyncStatus("synced", "✅ 已保留本地数据并上传云端");
   closeSyncConflictModal();
 }
@@ -3188,7 +3180,7 @@ function syncMergeBoth() {
   deduplicateCompanies();
   setSyncStatus("synced", "已合并两端数据");
   render();
-  syncToFirestore(merged).catch(e => console.warn('[syncMergeBoth] 同步远程失败:', e));
+  syncToGist(merged).catch(e => console.warn('[syncMergeBoth] 同步远程失败:', e));
   closeSyncConflictModal();
 }
 
@@ -3218,7 +3210,7 @@ function applyRemoteData() {
     }
   } else if (currentSyncHash) {
     // No pending data, fetch fresh from Firestore
-    loadFromFirestore().then(data => {
+    loadFromGist().then(data => {
       if (data) {
         saveStateToLocal(convertFirestoreDataToLocal(data));
         initMomoDefaults();
@@ -4074,7 +4066,7 @@ function loadState() {
 function saveState(state) {
   saveStateToLocal(state);
   console.log('[saveState] 保存数据到 Firestore, keys:', Object.keys(state).filter(k => k !== '_custom_companies' && state[k]?.positions?.length > 0));
-  syncToFirestore(state);
+  syncToGist(state);
 }
 
 // ===== Firestore Sync =====
@@ -4308,7 +4300,8 @@ async function updatePasswordStatus() {
   }
 }
 
-// ===== Firestore REST API (替代SDK WebChannel，解决网络超时问题) =====
+// ===== Gist Sync API (替代 Firestore，解决国内网络问题) =====
+// _toFirestoreValue / _fromFirestoreValue 保留用于 Firestore→Gist 一次性迁移
 function _toFirestoreValue(val) {
   if (val === null || val === undefined) return { nullValue: null };
   if (typeof val === 'string') return { stringValue: val };
@@ -4333,7 +4326,6 @@ function _fromFirestoreValue(fv) {
   if ('mapValue' in fv) {
     const obj = {};
     Object.keys(fv.mapValue.fields || {}).forEach(k => { obj[k] = _fromFirestoreValue(fv.mapValue.fields[k]); });
-    // If all keys are numeric, this was likely stored as an array -> return as array
     const keys = Object.keys(obj);
     if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
       return keys.sort((a,b) => parseInt(a)-parseInt(b)).map(k => obj[k]);
@@ -4342,65 +4334,77 @@ function _fromFirestoreValue(fv) {
   }
   return null;
 }
-function _firestoreUrl() {
-  return `https://firestore.googleapis.com/v1/projects/find-job---checklist/databases/(default)/documents/sync_codes/${currentSyncHash}/data/checklist?key=AIzaSyAgNy37pCBs_TykOJFxphFqUSiqruhajEc`;
+function _gistRawUrl() {
+  return 'https://gist.githubusercontent.com/molulinlin/' + GIST_ID + '/raw/' + GIST_FILE;
 }
 
-async function syncToFirestore(state) {
-  if (!firebaseReady || !currentSyncHash) {
-    console.warn('[syncToFirestore] 跳过: firebaseReady=', firebaseReady, 'currentSyncHash=', !!currentSyncHash);
-    pendingSync = true;
-    return;
-  }
+async function syncToGist(state) {
+  var token = localStorage.getItem('gist_token');
+  if (!token) { console.warn('[syncToGist] 无 token，跳过写入'); pendingSync = true; return; }
+  if (!currentSyncHash) { pendingSync = true; return; }
   try {
     setSyncStatus("syncing", "⏳ 同步中...");
-    _isLocalWrite = true;
-    console.log('[syncToFirestore] REST API 写入, keys:', Object.keys(state));
-    const res = await fetch(_firestoreUrl(), {
+    console.log('[syncToGist] Gist 写入, keys:', Object.keys(state).length);
+    var payload = { files: {} };
+    payload.files[GIST_FILE] = { content: JSON.stringify(state) };
+    var res = await fetch('https://api.github.com/gists/' + GIST_ID, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: { data: _toFirestoreValue(state), updatedAt: _toFirestoreValue(new Date().toISOString()) } })
+      headers: { 'Authorization': 'token ' + token, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
     if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + await res.text());
-    console.log('[syncToFirestore] ✅ REST API 写入成功');
+    console.log('[syncToGist] ✅ Gist 写入成功');
     setSyncStatus("synced", "✅ 已同步到云端");
     pendingSync = false;
   } catch (err) {
-    console.warn("[syncToFirestore] ❌ REST API 写入失败:", err);
-    _isLocalWrite = false;
-    if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
-      setSyncStatus("offline", "⚠️ 离线模式");
-    } else {
-      setSyncStatus("error", "同步失败，数据已保存到本地");
-    }
+    console.warn("[syncToGist] ❌ Gist 写入失败:", err);
+    setSyncStatus("error", "同步失败，数据已保存到本地");
     pendingSync = true;
   }
 }
 
-async function loadFromFirestore() {
-  if (!firebaseReady || !currentSyncHash) return null;
+async function loadFromGist() {
+  if (!currentSyncHash) return null;
   try {
-    const res = await fetch(_firestoreUrl());
+    var res = await fetch(_gistRawUrl() + '?t=' + Date.now(), { cache: 'no-cache' });
     if (!res.ok) {
-      if (res.status === 404) { console.log('[loadFromFirestore] 文档不存在'); return null; }
+      if (res.status === 404) { console.log('[loadFromGist] 无文档'); return null; }
       throw new Error('HTTP ' + res.status);
     }
-    const json = await res.json();
-    const fields = json?.fields?.data?.mapValue?.fields || null;
-    if (!fields) { console.log('[loadFromFirestore] 文档无数据'); return null; }
-    const converted = _fromFirestoreValue({mapValue:{fields}}) || fields;
-    console.log('[loadFromFirestore] ✅ REST API 读取成功, keys:', Object.keys(converted));
-    return converted;
+    var data = await res.json();
+    if (!data || data._placeholder) { console.log('[loadFromGist] 无数据'); return null; }
+    console.log('[loadFromGist] ✅ Gist 读取成功, keys:', Object.keys(data).length);
+    // === Firestore → Gist 一次性迁移 ===
+    if (data._needs_migration) {
+      console.log('[loadFromGist] 🔄 检测到迁移标记，从 Firestore 恢复...');
+      try {
+        var fsUrl = 'https://firestore.googleapis.com/v1/projects/find-job---checklist/databases/(default)/documents/sync_codes/' + currentSyncHash + '/data/checklist?key=AIzaSyAgNy37pCBs_TykOJFxphFqUSiqruhajEc';
+        var fsRes = await fetch(fsUrl);
+        if (fsRes.ok) {
+          var fsJson = await fsRes.json();
+          var fsFields = fsJson && fsJson.fields && fsJson.fields.data && fsJson.fields.data.mapValue && fsJson.fields.data.mapValue.fields || null;
+          if (fsFields) {
+            var converted = _fromFirestoreValue({mapValue:{fields:fsFields}}) || fsFields;
+            var localConverted = convertFirestoreDataToLocal(converted);
+            delete localConverted._needs_migration;
+            await syncToGist(localConverted);
+            console.log('[loadFromGist] ✅ Firestore 数据已迁移到 Gist');
+            return localConverted;
+          }
+        }
+      } catch (e) { console.warn('[loadFromGist] Firestore 迁移失败:', e); }
+    }
+    return data;
   } catch (err) {
-    console.warn("[loadFromFirestore] ❌ REST API 读取失败:", err);
+    console.warn("[loadFromGist] ❌ Gist 读取失败:", err);
     return null;
   }
 }
 
 async function retrySync() {
-  if (pendingSync && firebaseReady && currentSyncHash) {
-    const state = loadStateFromLocal();
-    await syncToFirestore(state);
+  if (pendingSync && currentSyncHash) {
+    var state = loadStateFromLocal();
+    await syncToGist(state);
   }
 }
 
@@ -6717,7 +6721,7 @@ function render() {
       clearTimeout(_noteTimer);
       _noteTimer = setTimeout(() => {
         console.log('[notes] 防抖触发，同步备注到 Firestore, card:', id);
-        syncToFirestore(loadState());
+        syncToGist(loadState());
       }, 1500);
     });
   });
@@ -6904,7 +6908,7 @@ async function initApp() {
         // 尝试从 Firestore 加载最新数据
         let firestoreData = null;
         try {
-          firestoreData = await loadFromFirestore();
+          firestoreData = await loadFromGist();
         } catch (e) {
           console.warn("[initApp] Firestore 加载失败:", e);
         }
@@ -6952,7 +6956,7 @@ async function initApp() {
         let firestoreData = null;
         try {
           console.log('[initApp] 从 Firestore 加载数据...');
-          firestoreData = await loadFromFirestore();
+          firestoreData = await loadFromGist();
           console.log('[initApp] Firestore 数据:', firestoreData ? '有 (' + Object.keys(firestoreData).length + ' keys)' : '无');
         } catch (e) {
           console.warn("[initApp] Firestore 加载失败:", e);
@@ -6976,14 +6980,14 @@ async function initApp() {
           } else if (hasLocalData) {
             // Firestore 数据无效但本地有数据，保留本地并上传
             console.warn('[initApp] Firestore 数据不完整，保留本地数据并上传');
-            await syncToFirestore(localData);
+            await syncToGist(localData);
             setSyncStatus("synced", "✅ 云端数据已更新");
           } else {
             setSyncStatus("synced", "✅ 同步码已绑定");
           }
         } else if (hasLocalData) {
           // 上传本地数据到云端
-          await syncToFirestore(localData);
+          await syncToGist(localData);
           setSyncStatus("synced", "✅ 本地数据已上传到云端");
         } else {
           setSyncStatus("synced", "✅ 同步码已绑定");
