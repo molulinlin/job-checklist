@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>JobPulse Firestore → Gist 迁移工具</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .card { background: #16213e; border-radius: 12px; padding: 32px; max-width: 560px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+  h1 { font-size: 20px; color: #e94560; margin-bottom: 16px; }
+  .step { margin: 16px 0; padding: 12px; background: #0f3460; border-radius: 8px; }
+  .step label { display: block; font-size: 13px; color: #a0a0a0; margin-bottom: 6px; }
+  .step input { width: 100%; padding: 8px 12px; border: 1px solid #333; border-radius: 6px; background: #1a1a2e; color: #e0e0e0; font-size: 14px; }
+  button { margin-top: 16px; padding: 10px 24px; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; font-weight: 600; }
+  #migrateBtn { background: #e94560; color: #fff; }
+  #migrateBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+  #log { margin-top: 16px; padding: 12px; background: #0a0a1a; border-radius: 8px; font-family: monospace; font-size: 13px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; min-height: 60px; }
+  .ok { color: #4caf50; }
+  .err { color: #e94560; }
+  .info { color: #64b5f6; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔄 Firestore → Gist 迁移工具</h1>
+  <p style="font-size:13px;color:#888;margin-bottom:16px;">从 Firestore 拉取数据，转换后写入 GitHub Gist</p>
+
+  <div class="step">
+    <label>GitHub PAT (gist scope)</label>
+    <input id="token" type="password" placeholder="ghp_xxxxxxxxxxxx">
+  </div>
+  <div class="step">
+    <label>同步码（默认 momo）</label>
+    <input id="syncCode" value="momo">
+  </div>
+  <button id="migrateBtn" onclick="migrate()">开始迁移</button>
+  <div id="log"></div>
+</div>
+
+<script>
+const GIST_ID = '8d3ff1e542daaf7d59b13d80b2912a44';
+const GIST_FILE = 'jobpulse_sync.json';
+const FIRESTORE_PROJECT = 'find-job---checklist';
+const FIRESTORE_API_KEY = 'AIzaSyAgNy37pCBs_TykOJFxphFqUSiqruhajEc';
+
+function log(msg, cls = '') {
+  const el = document.getElementById('log');
+  const span = document.createElement('div');
+  if (cls) span.className = cls;
+  span.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+  el.appendChild(span);
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sha256(text) {
+  const buf = new TextEncoder().encode(text);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Same _fromFirestoreValue as in index.html
+function fromFirestoreValue(val) {
+  if (!val) return val;
+  if ('stringValue' in val) return val.stringValue;
+  if ('integerValue' in val) return parseInt(val.integerValue);
+  if ('doubleValue' in val) return val.doubleValue;
+  if ('booleanValue' in val) return val.booleanValue;
+  if ('nullValue' in val) return null;
+  if ('timestampValue' in val) return new Date(val.timestampValue).getTime();
+  if ('arrayValue' in val) return (val.arrayValue.values || []).map(fromFirestoreValue);
+  if ('mapValue' in val) {
+    const fields = val.mapValue.fields || {};
+    const obj = {};
+    for (const k of Object.keys(fields)) obj[k] = fromFirestoreValue(fields[k]);
+    return obj;
+  }
+  return val;
+}
+
+// Same convertFirestoreDataToLocal as in index.html
+function convertFirestoreDataToLocal(firestoreData) {
+  if (!firestoreData || typeof firestoreData !== 'object') return firestoreData;
+  const converted = JSON.parse(JSON.stringify(firestoreData));
+  if (converted._custom_companies && typeof converted._custom_companies === 'object' && !Array.isArray(converted._custom_companies)) {
+    converted._custom_companies = Object.values(converted._custom_companies);
+  }
+  if (!converted._custom_companies) {
+    converted._custom_companies = [];
+  }
+  return converted;
+}
+
+async function migrate() {
+  const btn = document.getElementById('migrateBtn');
+  const token = document.getElementById('token').value.trim();
+  const syncCode = document.getElementById('syncCode').value.trim();
+  if (!token) { log('请输入 GitHub PAT', 'err'); return; }
+  btn.disabled = true;
+  btn.textContent = '迁移中...';
+
+  try {
+    const hash = await sha256(syncCode);
+    log('同步码哈希: ' + hash.substring(0, 16) + '...', 'info');
+
+    // Step 1: Read from Firestore
+    const fsUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/sync_codes/${hash}/data/checklist?key=${FIRESTORE_API_KEY}`;
+    log('正在从 Firestore 读取...', 'info');
+    const fsRes = await fetch(fsUrl);
+    if (!fsRes.ok) {
+      log(`Firestore 返回 ${fsRes.status} ${fsRes.statusText}`, 'err');
+      const body = await fsRes.text();
+      log('响应: ' + body.substring(0, 300), 'err');
+      btn.disabled = false; btn.textContent = '开始迁移'; return;
+    }
+    const fsJson = await fsRes.json();
+    const fsFields = fsJson && fsJson.fields && fsJson.fields.data && fsJson.fields.data.mapValue && fsJson.fields.data.mapValue.fields;
+    if (!fsFields) {
+      log('Firestore 数据格式异常，未找到 fields.data.mapValue.fields', 'err');
+      log('原始响应: ' + JSON.stringify(fsJson).substring(0, 200), 'err');
+      btn.disabled = false; btn.textContent = '开始迁移'; return;
+    }
+    log(`Firestore 读取成功，${Object.keys(fsFields).length} 个字段`, 'ok');
+
+    // Step 2: Convert
+    const plainData = fromFirestoreValue({ mapValue: { fields: fsFields } });
+    log(`转换为普通对象: ${Object.keys(plainData).length} 个键`, 'info');
+    const localData = convertFirestoreDataToLocal(plainData);
+    delete localData._needs_migration;
+    log(`转换完成，_custom_companies: ${Array.isArray(localData._custom_companies) ? localData._custom_companies.length + ' 个公司' : '缺失'}`, 'ok');
+
+    // Step 3: Write to Gist
+    log('正在写入 Gist...', 'info');
+    const gistRes = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      body: JSON.stringify({
+        files: {
+          [GIST_FILE]: {
+            content: JSON.stringify(localData, null, 2)
+          }
+        }
+      })
+    });
+    if (!gistRes.ok) {
+      const body = await gistRes.text();
+      log(`Gist 写入失败 ${gistRes.status}: ${body.substring(0, 200)}`, 'err');
+      btn.disabled = false; btn.textContent = '开始迁移'; return;
+    }
+    log('✅ Gist 写入成功！数据已迁移', 'ok');
+
+    // Step 4: Verify
+    const rawUrl = `https://gist.githubusercontent.com/molulinlin/${GIST_ID}/raw/${GIST_FILE}`;
+    const verifyRes = await fetch(rawUrl + '?t=' + Date.now());
+    const verifyData = await verifyRes.json();
+    log(`验证：Gist 现含 ${Object.keys(verifyData).length} 个键`, verifyData._placeholder ? 'err' : 'ok');
+    log(`迁移完成！刷新 JobPulse 页面，绑定 "${syncCode}" 即可同步数据`, 'ok');
+
+  } catch (e) {
+    log('❌ 迁移失败: ' + e.message, 'err');
+  }
+  btn.disabled = false;
+  btn.textContent = '开始迁移';
+}
+</script>
+</body>
+</html>
