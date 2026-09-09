@@ -11,8 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="JobPulse 职达">
 <meta name="theme-color" content="#2d5a27">
 <link rel="manifest" href="data:application/json,{&#34;name&#34;:&#34;JobPulse 职达&#34;,&#34;short_name&#34;:&#34;JobPulse&#34;,&#34;start_url&#34;:&#34;.&#34;,&#34;display&#34;:&#34;standalone&#34;,&#34;background_color&#34;:&#34;%23fafaf8&#34;,&#34;theme_color&#34;:&#34;%232d5a27&#34;,&#34;icons&#34;:[{&#34;src&#34;:&#34;data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%234f46e5'/><path d='M25 52 L42 69 L75 36' stroke='white' stroke-width='12' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>&#34;,&#34;sizes&#34;:&#34;192x192&#34;,&#34;type&#34;:&#34;image/svg+xml&#34;}]}">
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+
 <style>
   :root {
     --bg: #fafaf8;
@@ -2594,8 +2593,7 @@
     </div>
     <div class="sync-code-bound" style="margin-top:8px;">
       <span class="sync-code-label">🔒 密码保护：</span>
-      <span id="syncPasswordStatus" style="font-size:0.8rem;color:var(--text-secondary);">未设置</span>
-      <button class="sync-code-btn" style="font-size:0.72rem;padding:3px 8px;margin-left:8px;" onclick="manageSyncPassword()">设置密码</button>
+      <span id="syncPasswordStatus" style="font-size:0.8rem;color:var(--text-secondary);">Gist同步 🔓</span>
     </div>
   </div>
 </div>
@@ -2725,7 +2723,7 @@
 </div>
 
 <script>
-// ===== Industry Classification Data (must be defined BEFORE Firebase init, because Firebase onSnapshot can trigger render() early) =====
+// ===== Industry Classification Data =====
 var INDUSTRY_KEYWORDS = null;
 function _initIndustryKeywords() {
   if (INDUSTRY_KEYWORDS) return;
@@ -2737,74 +2735,16 @@ function _initIndustryKeywords() {
   }
 }
 
-// ===== Firebase Configuration =====
-const firebaseConfig = {
-  apiKey: "AIzaSyAgNy37pCBs_TykOJFxphFqUSiqruhajEc",
-  authDomain: "find-job---checklist.firebaseapp.com",
-  projectId: "find-job---checklist",
-  storageBucket: "find-job---checklist.firebasestorage.app",
-  messagingSenderId: "531079004705",
-  appId: "1:531079004705:web:fa42e1df7b7f8e55d29960"
-};
-
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-
-// ===== Firebase Company Database Loader =====
-let firebaseCompanyData = null; // 存储从Firebase加载的公司数据
-
-async function loadCompanyDatabaseFromFirebase() {
-  try {
-    console.log('[loadCompanyDatabase] 开始从Firebase加载公司数据库...');
-    const docRef = db.collection("system").doc("companyDatabase");
-    const docSnap = await docRef.get();
-    
-    if (docSnap.exists) {
-      const data = docSnap.data();
-      if (data && data.companies && Array.isArray(data.companies)) {
-        firebaseCompanyData = data.companies;
-        console.log('[loadCompanyDatabase] ✅ 成功加载', firebaseCompanyData.length, '条公司数据');
-        // 覆盖MOMO_DEFAULTS
-        if (firebaseCompanyData.length > 0) {
-          MOMO_DEFAULTS.length = 0; // 清空原数组
-          firebaseCompanyData.forEach(c => MOMO_DEFAULTS.push(c));
-          console.log('[loadCompanyDatabase] ✅ 已覆盖MOMO_DEFAULTS');
-        }
-        return true;
-      } else {
-        console.log('[loadCompanyDatabase] Firebase中无有效公司数据');
-        return false;
-      }
-    } else {
-      console.log('[loadCompanyDatabase] Firebase中无companyDatabase文档');
-      return false;
-    }
-  } catch (err) {
-    console.warn('[loadCompanyDatabase] 加载失败:', err);
-    return false;
-  }
-}
-
-// 页面加载时自动执行
-loadCompanyDatabaseFromFirebase().then(loaded => {
-  if (loaded) {
-    console.log('[loadCompanyDatabase] 数据加载完成，重新初始化...');
-    // 重新执行初始化和渲染
-    if (typeof initMomoDefaults === 'function') {
-      initMomoDefaults();
-    }
-    if (typeof render === 'function') {
-      render();
-    }
-  }
-});
+// ===== Gist Sync Configuration =====
+const GIST_ID = '8d3ff1e542daaf7d59b13d80b2912a44';
+const GIST_RAW_URL = 'https://gist.githubusercontent.com/molulinlin/' + GIST_ID + '/raw/jobpulse_sync.json';
+const GIST_API_URL = 'https://api.github.com/gists/' + GIST_ID;
 
 // ===== App State =====
 let currentSyncCode = null;
 let currentSyncHash = null;
-let firebaseReady = false;
+let gistReady = true; // Gist sync is always available (no auth needed for read)
 let pendingSync = false;
-let realtimeUnsubscribe = null;
 let syncIntervalId = null; // 定时同步轮询
 let _isLocalWrite = false;
 
@@ -2883,8 +2823,8 @@ async function bindSyncCodeUI() {
   const code = input.value.trim();
   if (!code) return;
 
-  // 确保 firebaseReady 被设置为 true
-  firebaseReady = true;
+  // 确保 gistReady 被设置为 true
+  gistReady = true;
 
   const btn = document.getElementById("syncCodeBindBtn");
   btn.disabled = true;
@@ -2895,45 +2835,34 @@ async function bindSyncCodeUI() {
     const hash = await hashSyncCode(code);
     console.log('[bindSyncCodeUI] 同步码哈希:', hash.substring(0, 8) + '...');
 
-    // 🔒 密码保护验证
-    const pwdCheck = await checkSyncCodePassword(hash);
-    if (pwdCheck.required && !pwdCheck.verified) {
-      // Password verification failed or cancelled
-      btn.disabled = false;
-      btn.textContent = "绑定同步码";
-      setSyncStatus("initial", "📴 绑定已取消");
-      return;
-    }
-
     currentSyncHash = hash;
     currentSyncCode = code;
 
-    // Check if Firestore already has data for this sync code
-    let firestoreData = null;
+    // Check if Gist already has data for this sync code
+    let gistData = null;
     try {
-      const ref = getFirestoreRef();
-      const doc = await ref.get();
-      if (doc.exists && doc.data().data) {
-        firestoreData = doc.data().data;
-        console.log('[bindSyncCodeUI] Firestore 有数据, keys:', Object.keys(firestoreData));
-      } else {
-        console.log('[bindSyncCodeUI] Firestore 无数据');
-      }
-    } catch (e) {
-      console.warn("[bindSyncCodeUI] 检查 Firestore 数据失败:", e);
-    }
+      const response = await fetch(GIST_RAW_URL + '?t=' + Date.now(), { headers: { 'Accept': 'application/json' } });
+      if (response.ok) {
+        const gistContent = await response.text();
+        const parsed = JSON.parse(gistContent);
+        if (parsed && parsed.data) {
+          gistData = parsed.data;
+          console.log('[bindSyncCodeUI] Gist 有数据, keys:', Object.keys(gistData));
+        } else { console.log('[bindSyncCodeUI] Gist 无数据'); }
+      } else { console.log('[bindSyncCodeUI] Gist 无数据 (status: ' + response.status + ')'); }
+    } catch (e) { console.warn("[bindSyncCodeUI] 检查 Gist 数据失败:", e); }
 
     const localData = loadStateFromLocal();
     const hasLocalData = localData && Object.keys(localData).length > 0;
-    const hasFirestoreData = firestoreData && Object.keys(firestoreData).length > 0;
-    console.log('[bindSyncCodeUI] hasLocalData:', hasLocalData, ', hasFirestoreData:', hasFirestoreData);
+    const hasGistData = gistData && Object.keys(gistData).length > 0;
+    console.log('[bindSyncCodeUI] hasLocalData:', hasLocalData, ', hasGistData:', hasGistData);
 
     // 数据隔离：绑定新同步码时，先清空本地数据，避免不同用户数据混淆
-    if (hasLocalData && !hasFirestoreData) {
+    if (hasLocalData && !hasGistData) {
       // 本地有数据但云端无数据：询问用户是否上传本地数据
       const uploadLocal = confirm("当前同步码没有云端数据。\n\n是否将本地数据上传到云端？\n\n点击「确定」上传本地数据\n点击「取消」清空本地数据，从空白开始");
       if (uploadLocal) {
-        await syncToFirestore(localData);
+        await syncToGist(localData);
         setSyncStatus("synced", "✅ 本地数据已上传到云端");
       } else {
         // 清空本地数据
@@ -2941,21 +2870,21 @@ async function bindSyncCodeUI() {
         saveStateToLocal(emptyState);
         setSyncStatus("synced", "✅ 同步码已绑定，从空白开始");
       }
-    } else if (hasFirestoreData && hasLocalData) {
-      // Both have data - ask user
-      const useRemote = confirm("该同步码已有数据，是否覆盖本地数据？\n\n点击「确定」使用云端数据覆盖本地\n点击「取消」保留本地数据并上传到云端");
-      if (useRemote) {
-        saveStateToLocal(convertFirestoreDataToLocal(firestoreData));
-        setSyncStatus("synced", "✅ 已从云端同步");
-      } else {
-        // Upload local to cloud
-        await syncToFirestore(localData);
-        setSyncStatus("synced", "✅ 本地数据已上传到云端");
-      }
-    } else if (hasFirestoreData) {
-      // Only Firestore has data
-      saveStateToLocal(convertFirestoreDataToLocal(firestoreData));
-      initMomoDefaults();
+    } else if (hasGistData && hasLocalData) {
+      // Both have data - show merge dialog
+      setSyncStatus("synced", " 检测到数据差异");
+      _pendingSyncData = gistData;
+      showSyncConflictModal();
+      localStorage.setItem("sync_code", code);
+      setupRealtimeListener();
+      updatePasswordStatus();
+      render();
+      btn.disabled = false;
+      btn.textContent = "绑定同步码";
+      return; // Don't continue, let user decide in modal
+    } else if (hasGistData) {
+      // Only Gist has data
+      saveStateToLocal(convertGistDataToLocal(gistData));
       setSyncStatus("synced", "✅ 已从云端同步");
     } else {
       // Both empty
@@ -2986,10 +2915,10 @@ async function bindSyncCodeUI() {
 function unbindSyncCodeUI() {
   if (!confirm("确定要解绑同步码吗？解绑后本地数据将保留，但不再与云端同步。")) return;
 
-  // Stop real-time listener
-  if (realtimeUnsubscribe) {
-    realtimeUnsubscribe();
-    realtimeUnsubscribe = null;
+  // Stop polling
+  if (syncIntervalId) {
+    clearInterval(syncIntervalId);
+    syncIntervalId = null;
   }
 
   currentSyncCode = null;
@@ -3023,15 +2952,15 @@ function setupRealtimeListener() {
 let _pendingSyncData = null; // 暂存待同步的远程数据
 
 async function pollRemoteSync() {
-  if (!currentSyncHash || !firebaseReady) return;
+  if (!currentSyncHash || !gistReady) return;
 
   try {
-    const ref = getFirestoreRef();
-    if (!ref) return;
-
-    const doc = await ref.get();
-    if (doc.exists && doc.data() && doc.data().data) {
-      const remoteData = doc.data().data;
+    const response = await fetch(GIST_RAW_URL + '?t=' + Date.now(), { headers: { 'Accept': 'application/json' } });
+    if (!response.ok) return;
+    const gistContent = await response.text();
+    const parsed = JSON.parse(gistContent);
+    if (parsed && parsed.data) {
+      const remoteData = parsed.data;
       const localData = loadStateFromLocal();
       const remoteJson = JSON.stringify(remoteData);
       const localJson = JSON.stringify(localData);
@@ -3071,7 +3000,7 @@ function syncUseRemote() {
   if (!_pendingSyncData) { closeSyncConflictModal(); return; }
   if (!confirm("⚠️ 确定要用云端数据覆盖本地吗？\n\n本地当前的修改将被替换为云端数据。")) return;
   const localData = loadStateFromLocal();
-  const converted = convertFirestoreDataToLocal(_pendingSyncData);
+  const converted = convertGistDataToLocal(_pendingSyncData);
   // 合并本地删除黑名单
   const localDeleted = localData._deleted_companies || [];
   if (localDeleted.length > 0) {
@@ -3079,7 +3008,7 @@ function syncUseRemote() {
     converted._deleted_companies = Array.from(merged);
   }
   saveStateToLocal(converted);
-  initMomoDefaults();
+  if (!converted._defaults_initialized) initMomoDefaults();
   deduplicateCompanies();
   setSyncStatus("synced", "✅ 已使用云端数据");
   render();
@@ -3100,9 +3029,51 @@ function syncUseRemote() {
 async function syncKeepLocal() {
   if (!confirm("⚠️ 确定要保留本地数据并覆盖云端吗？\n\n云端当前的数据将被本地数据替换。")) return;
   const localData = loadStateFromLocal();
-  await syncToFirestore(localData);
+  await syncToGist(localData);
   setSyncStatus("synced", "✅ 已保留本地数据并上传云端");
   closeSyncConflictModal();
+}
+
+// 用户选择：合并两端数据
+function syncMergeData() {
+  if (!_pendingSyncData) { closeSyncConflictModal(); return; }
+  if (!confirm("⚠️ 确定要合并云端和本地数据吗？\n\n- 云端有但本地没有的公司 → 添加到本地\n- 本地有但云端没有的公司 → 保留\n- 两端都有的公司 → 保留本地进度\n- 已删除的公司 → 保持删除状态")) return;
+  const localData = loadStateFromLocal();
+  const remoteData = convertGistDataToLocal(_pendingSyncData);
+  
+  // Merge companies: add remote companies not in local
+  const localIds = new Set(localData._custom_companies.map(c => c.id));
+  const localDeleted = new Set(localData._deleted_companies || []);
+  let added = 0;
+  
+  (remoteData._custom_companies || []).forEach(c => {
+    if (!localIds.has(c.id) && !localDeleted.has(c.id) && !localDeleted.has((c.company||'').replace(/\s/g,'').toLowerCase())) {
+      localData._custom_companies.push(c);
+      added++;
+    }
+  });
+  
+  // Copy progress data from remote for companies not in local
+  Object.keys(remoteData).forEach(key => {
+    if (key.startsWith('_')) return;
+    if (!localData[key]) localData[key] = remoteData[key];
+  });
+  
+  // Preserve _defaults_initialized
+  localData._defaults_initialized = true;
+  
+  saveStateToLocal(localData);
+  deduplicateCompanies();
+  setSyncStatus("synced", "✅ 已合并 " + added + " 个新公司");
+  render();
+  closeSyncConflictModal();
+  if (_lastSearchQuery) {
+    setTimeout(() => {
+      const inp = document.getElementById("searchInput");
+      if (inp && inp.value.trim().toLowerCase() !== _lastSearchQuery) { inp.value = _lastSearchQuery; }
+      onSearchInput();
+    }, 50);
+  }
 }
 
 // 用户选择：暂时不同步
@@ -3111,11 +3082,18 @@ function syncDismiss() {
   closeSyncConflictModal();
 }
 
+async function updatePasswordStatus() {
+  const statusEl = document.getElementById('syncPasswordStatus');
+  if (!statusEl || !currentSyncHash) return;
+  statusEl.textContent = 'Gist同步 🔓';
+  statusEl.style.color = '#1e7a1e';
+}
+
 // Apply remote data when user clicks refresh (fallback for manual sync)
 function applyRemoteData() {
   console.log('[applyRemoteData] 用户手动触发同步');
   if (window._pendingRemoteData) {
-    saveStateToLocal(convertFirestoreDataToLocal(window._pendingRemoteData));
+    saveStateToLocal(convertGistDataToLocal(window._pendingRemoteData));
     window._pendingRemoteData = null;
     setSyncStatus("synced", "✅ 已同步最新数据");
     render();
@@ -3130,14 +3108,14 @@ function applyRemoteData() {
       }, 50);
     }
   } else if (currentSyncHash) {
-    // No pending data, fetch fresh from Firestore
-    loadFromFirestore().then(data => {
-      if (data) {
-        saveStateToLocal(convertFirestoreDataToLocal(data));
-        initMomoDefaults();
-        setSyncStatus("synced", "✅ 已从云端同步");
+    // No pending data, fetch fresh from Gist
+    const data = await loadFromGist();
+    if (data) {
+      saveStateToLocal(convertGistDataToLocal(data));
+      const savedState = loadStateFromLocal();
+      if (!savedState._defaults_initialized) initMomoDefaults();
+      setSyncStatus("synced", " 已从云端同步");
       render();
-      // 恢复搜索状态
       if (_lastSearchQuery) {
         setTimeout(() => {
           const inp = document.getElementById("searchInput");
@@ -3147,12 +3125,11 @@ function applyRemoteData() {
           onSearchInput();
         }, 50);
       }
-        console.log('[applyRemoteData] 从 Firestore 拉取并应用成功');
-      } else {
-        console.log('[applyRemoteData] Firestore 无数据');
-        setSyncStatus("synced", "✅ 云端暂无新数据");
-      }
-    });
+      console.log('[applyRemoteData] 从 Gist 拉取并应用成功');
+    } else {
+      console.log('[applyRemoteData] Gist 无数据');
+      setSyncStatus("synced", "✅ 云端暂无新数据");
+    }
   }
 }
 
@@ -3999,17 +3976,16 @@ function loadState() {
   return loadStateFromLocal();
 }
 
-// Wrapper: saveState updates both localStorage and Firestore
+// Wrapper: saveState updates both localStorage and Gist
 function saveState(state) {
   saveStateToLocal(state);
-  console.log('[saveState] 保存数据到 Firestore, keys:', Object.keys(state).filter(k => k !== '_custom_companies' && state[k]?.positions?.length > 0));
-  syncToFirestore(state);
+  console.log('[saveState] 保存数据到 Gist (sync), keys:', Object.keys(state).filter(k => k !== '_custom_companies' && state[k]?.positions?.length > 0));
+  syncToGist(state);
 }
 
-// ===== Firestore Sync =====
-function getFirestoreRef() {
-  if (!currentSyncHash) return null;
-  return db.collection("sync_codes").doc(currentSyncHash).collection("data").doc("checklist");
+// ===== Gist Sync =====
+function getGistApiUrl() {
+  return GIST_API_URL;
 }
 
 // ===== Custom Password Prompt Modal (mobile-friendly) =====
@@ -4070,182 +4046,38 @@ function showCustomAlert(message) {
   }).then(() => {}); // We don't care about the return value for alerts
 }
 
-function getPasswordConfigRef(hash) {
-  const h = hash || currentSyncHash;
-  if (!h) return null;
-  return db.collection("sync_codes").doc(h).collection("config").doc("password");
-}
 
-async function checkSyncCodePassword(hash) {
-  // Returns: { required: bool, verified: bool }
-  try {
-    const ref = getPasswordConfigRef(hash);
-    if (!ref) return { required: false, verified: true };
-    const doc = await ref.get();
-    if (!doc.exists || !doc.data().passwordHash) {
-      return { required: false, verified: true };
-    }
-    const storedHash = doc.data().passwordHash;
-    // Prompt user for password using custom modal
-    let attempts = 0;
-    while (attempts < 3) {
-      const pwd = await showPasswordPrompt({
-        title: '🔒 密码保护',
-        desc: '该同步码已设置密码保护，请输入密码：',
-        isPassword: true,
-        placeholder: '输入同步码密码'
-      });
-      if (pwd === null) return { required: true, verified: false }; // User cancelled
-      const inputHash = await hashSyncCode(pwd);
-      if (inputHash === storedHash) {
-        return { required: true, verified: true };
-      }
-      attempts++;
-      if (attempts < 3) await showPasswordPrompt({
-        title: '⚠️ 密码错误',
-        desc: '密码错误，请重试（剩余 ' + (3 - attempts) + ' 次机会）',
-        isPassword: false,
-        placeholder: ''
-      });
-    }
-    await showPasswordPrompt({
-      title: '⚠️ 操作取消',
-      desc: '密码错误次数过多，已取消绑定',
-      isPassword: false,
-      placeholder: ''
-    });
-    return { required: true, verified: false };
-  } catch (e) {
-    console.warn('[checkSyncCodePassword] 检查失败:', e);
-    return { required: false, verified: true }; // Fail open if check fails
-  }
-}
-
-async function setSyncCodePassword(password) {
+async function syncToGist(state) {
   if (!currentSyncHash) {
-    await showPasswordPrompt({ title: '⚠️ 提示', desc: '请先绑定同步码', isPassword: false, placeholder: '' });
-    return false;
-  }
-  try {
-    const hash = await hashSyncCode(password);
-    const ref = getPasswordConfigRef();
-    await ref.set({ passwordHash: hash, setAt: new Date().toISOString() });
-    console.log('[setSyncCodePassword] 密码已设置');
-    return true;
-  } catch (e) {
-    console.warn('[setSyncCodePassword] 设置失败:', e);
-    await showPasswordPrompt({ title: '⚠️ 错误', desc: '设置密码失败：' + e.message, isPassword: false, placeholder: '' });
-    return false;
-  }
-}
-
-async function removeSyncCodePassword() {
-  if (!currentSyncHash) return false;
-  try {
-    const ref = getPasswordConfigRef();
-    await ref.delete();
-    console.log('[removeSyncCodePassword] 密码已移除');
-    return true;
-  } catch (e) {
-    console.warn('[removeSyncCodePassword] 移除失败:', e);
-    return false;
-  }
-}
-
-async function manageSyncPassword() {
-  if (!currentSyncHash) {
-    await showPasswordPrompt({ title: '⚠️ 提示', desc: '请先绑定同步码', isPassword: false, placeholder: '' });
-    return;
-  }
-  // Check current password status
-  const ref = getPasswordConfigRef();
-  let hasPassword = false;
-  try {
-    const doc = await ref.get();
-    hasPassword = doc.exists && !!doc.data().passwordHash;
-  } catch (e) {}
-
-  if (hasPassword) {
-    const action = await showPasswordPrompt({
-      title: '🔐 密码管理',
-      desc: '当前已设置密码。输入新密码可修改，输入 "remove" 可移除密码，取消则不做修改。',
-      isPassword: false,
-      placeholder: '输入新密码或 "remove"'
-    });
-    if (action === null) return; // Cancelled
-    if (action.toLowerCase() === 'remove') {
-      if (await removeSyncCodePassword()) {
-        await showPasswordPrompt({ title: '✅ 成功', desc: '密码已移除', isPassword: false, placeholder: '' });
-        updatePasswordStatus();
-      }
-    } else if (action.trim().length >= 4) {
-      if (await setSyncCodePassword(action.trim())) {
-        await showPasswordPrompt({ title: '✅ 成功', desc: '密码已更新', isPassword: false, placeholder: '' });
-        updatePasswordStatus();
-      }
-    } else {
-      await showPasswordPrompt({ title: '⚠️ 提示', desc: '密码至少需要 4 个字符', isPassword: false, placeholder: '' });
-    }
-  } else {
-    const pwd = await showPasswordPrompt({
-      title: '🔐 设置密码',
-      desc: '为同步码 "' + currentSyncCode + '" 设置密码。其他人绑定该同步码时需要输入此密码才能访问。密码至少 4 个字符。',
-      isPassword: true,
-      placeholder: '输入新密码'
-    });
-    if (pwd === null) return; // Cancelled
-    if (pwd.trim().length < 4) {
-      await showPasswordPrompt({ title: '⚠️ 提示', desc: '密码至少需要 4 个字符', isPassword: false, placeholder: '' });
-      return;
-    }
-    if (await setSyncCodePassword(pwd.trim())) {
-      await showPasswordPrompt({ title: '✅ 成功', desc: '密码已设置！其他人需要输入密码才能绑定此同步码', isPassword: false, placeholder: '' });
-      updatePasswordStatus();
-    }
-  }
-}
-
-async function updatePasswordStatus() {
-  const statusEl = document.getElementById('syncPasswordStatus');
-  if (!statusEl || !currentSyncHash) return;
-  try {
-    const ref = getPasswordConfigRef();
-    const doc = await ref.get();
-    if (doc.exists && doc.data().passwordHash) {
-      statusEl.textContent = '已开启 🔐';
-      statusEl.style.color = '#1e7a1e';
-    } else {
-      statusEl.textContent = '未设置';
-      statusEl.style.color = 'var(--text-secondary)';
-    }
-  } catch (e) {
-    statusEl.textContent = '未知';
-  }
-}
-
-async function syncToFirestore(state) {
-  if (!firebaseReady || !currentSyncHash) {
-    console.warn('[syncToFirestore] 跳过: firebaseReady=', firebaseReady, 'currentSyncHash=', !!currentSyncHash);
+    console.warn('[syncToGist] 跳过: 无同步码');
     pendingSync = true;
     return;
   }
   try {
-    setSyncStatus("syncing", "⏳ 同步中...");
-    const ref = getFirestoreRef();
-    if (!ref) return;
+    setSyncStatus("syncing", " 同步中...");
     _isLocalWrite = true;
-    console.log('[syncToFirestore] 开始写入 Firestore, 数据 keys:', Object.keys(state));
-    await ref.set({
-      data: state,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    console.log('[syncToGist] 开始写入 Gist');
+    const patchData = {};
+    patchData[GIST_FILE] = {
+      content: JSON.stringify({ data: state, updatedAt: new Date().toISOString() })
+    };
+    const response = await fetch(GIST_API_URL, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': 'token ' + GIST_TOKEN,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      body: JSON.stringify({ files: patchData })
     });
-    console.log('[syncToFirestore] ✅ 写入成功');
+    if (!response.ok) throw new Error('Gist PATCH failed: ' + response.status);
+    console.log('[syncToGist]  写入成功');
     setSyncStatus("synced", "✅ 已同步到云端");
     pendingSync = false;
   } catch (err) {
-    console.warn("[syncToFirestore] ❌ 写入失败:", err);
+    console.warn("[syncToGist] ❌ 写入失败:", err);
     _isLocalWrite = false;
-    if (err.code === 'unavailable' || err.message?.includes('network')) {
+    if (err.message && err.message.includes('network')) {
       setSyncStatus("offline", "⚠️ 离线模式");
     } else {
       setSyncStatus("error", "⚠️ 同步失败，数据已保存到本地");
@@ -4254,29 +4086,32 @@ async function syncToFirestore(state) {
   }
 }
 
-async function loadFromFirestore() {
-  if (!firebaseReady || !currentSyncHash) return null;
+async function loadFromGist() {
+  if (!currentSyncHash) return null;
   try {
-    const ref = getFirestoreRef();
-    if (!ref) return null;
-    const doc = await ref.get();
-    if (doc.exists) {
-      const data = doc.data().data || null;
-      console.log('[loadFromFirestore] ✅ 读取成功, keys:', data ? Object.keys(data) : 'null');
-      return data;
+    console.log('[loadFromGist] 开始从 Gist 加载...');
+    const response = await fetch(GIST_RAW_URL + '?t=' + Date.now(), {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!response.ok) {
+      if (response.status === 404) { console.log('[loadFromGist] Gist 文件不存在'); return null; }
+      throw new Error('Gist fetch failed: ' + response.status);
     }
-    console.log('[loadFromFirestore] 文档不存在');
-    return null;
+    const gistContent = await response.text();
+    const parsed = JSON.parse(gistContent);
+    const data = parsed.data || null;
+    console.log('[loadFromGist] ✅ 读取成功, keys:', data ? Object.keys(data) : 'null');
+    return data;
   } catch (err) {
-    console.warn("[loadFromFirestore] ❌ 读取失败:", err);
+    console.warn("[loadFromGist] ❌ 读取失败:", err);
     return null;
   }
 }
 
 async function retrySync() {
-  if (pendingSync && firebaseReady && currentSyncHash) {
+  if (pendingSync && currentSyncHash) {
     const state = loadStateFromLocal();
-    await syncToFirestore(state);
+    await syncToGist(state);
   }
 }
 
@@ -6585,12 +6420,12 @@ function render() {
       const st = loadState();
       if (!st[id]) st[id] = { positions: [], note: "" };
       st[id].note = ta.value;
-      // Save to localStorage immediately, debounce Firestore sync
+      // Save to localStorage immediately, debounce Gist sync
       saveStateToLocal(st);
       clearTimeout(_noteTimer);
       _noteTimer = setTimeout(() => {
-        console.log('[notes] 防抖触发，同步备注到 Firestore, card:', id);
-        syncToFirestore(loadState());
+        console.log('[notes] 防抖触发，同步备注到 Gist, card:', id);
+        syncToGist(loadState());
       }, 1500);
     });
   });
@@ -6747,7 +6582,7 @@ function resetAll() {
 
 // ===== App Initialization =====
 async function initApp() {
-  firebaseReady = true;
+  gistReady = true;
 
   // 1. 优先检查 URL 中的 sync 参数（解决手机浏览器清 localStorage 的问题）
   const urlParams = new URLSearchParams(window.location.search);
@@ -6774,29 +6609,29 @@ async function initApp() {
         currentSyncHash = hash;
         currentSyncCode = effectiveSyncCode;
 
-        // 尝试从 Firestore 加载最新数据
-        let firestoreData = null;
+        // 尝试从 Gist 加载最新数据
+        let gistData = null;
         try {
-          firestoreData = await loadFromFirestore();
+          gistData = await loadFromGist();
         } catch (e) {
-          console.warn("[initApp] Firestore 加载失败:", e);
+          console.warn("[initApp] Gist 加载失败:", e);
         }
 
         const hasLocalData = localData && Object.keys(localData).length > 0;
-        const hasFirestoreData = firestoreData && Object.keys(firestoreData).length > 0;
+        const hasGistData = gistData && Object.keys(gistData).length > 0;
 
-        // 数据保护：检查 Firestore 数据完整性
-        if (hasFirestoreData) {
-          const firestoreCompanies = firestoreData._custom_companies || [];
-          const hasProgressData = Object.keys(firestoreData).some(k => !k.startsWith('_') && firestoreData[k]?.positions?.length > 0);
+        // 数据保护：检查 Gist 数据完整性
+        if (hasGistData) {
+          const gistCompanies = gistData._custom_companies || [];
+          const hasProgressData = Object.keys(gistData).some(k => !k.startsWith('_') && gistData[k]?.positions?.length > 0);
           
-          if (firestoreCompanies.length > 0 || hasProgressData) {
-            // Firestore 数据有效，覆盖本地
-            saveStateToLocal(convertFirestoreDataToLocal(firestoreData));
-            console.log('[initApp] 恢复绑定：Firestore 数据有效，已同步到本地');
+          if (gistCompanies.length > 0 || hasProgressData) {
+            // Gist 数据有效，覆盖本地
+            saveStateToLocal(convertGistDataToLocal(gistData));
+            console.log('[initApp] 恢复绑定：Gist 数据有效，已同步到本地');
           } else if (hasLocalData) {
-            // Firestore 数据无效，保留本地数据
-            console.warn('[initApp] 恢复绑定：Firestore 数据不完整，保留本地数据');
+            // Gist 数据无效，保留本地数据
+            console.warn('[initApp] 恢复绑定：Gist 数据不完整，保留本地数据');
           }
         }
 
@@ -6804,7 +6639,7 @@ async function initApp() {
         setupRealtimeListener();
         updateSyncCodeUI();
         // 已有云端数据时不再注入默认模板公司，避免重复添加
-        if (!hasFirestoreData) initMomoDefaults();
+        if (!hasGistData && !localData._defaults_initialized) initMomoDefaults();
         deduplicateCompanies();
         render();
       } catch (err) {
@@ -6822,42 +6657,42 @@ async function initApp() {
         currentSyncHash = hash;
         currentSyncCode = effectiveSyncCode;
 
-        // Try to load from Firestore
-        let firestoreData = null;
+        // Try to load from Gist
+        let gistData = null;
         try {
-          console.log('[initApp] 从 Firestore 加载数据...');
-          firestoreData = await loadFromFirestore();
-          console.log('[initApp] Firestore 数据:', firestoreData ? '有 (' + Object.keys(firestoreData).length + ' keys)' : '无');
+          console.log('[initApp] 从 Gist 加载数据...');
+          gistData = await loadFromGist();
+          console.log('[initApp] Gist 数据:', gistData ? '有 (' + Object.keys(gistData).length + ' keys)' : '无');
         } catch (e) {
-          console.warn("[initApp] Firestore 加载失败:", e);
+          console.warn("[initApp] Gist 加载失败:", e);
         }
 
         const hasLocalData = localData && Object.keys(localData).length > 0;
-        const hasFirestoreData = firestoreData && Object.keys(firestoreData).length > 0;
-        console.log('[initApp] hasLocalData:', hasLocalData, ', hasFirestoreData:', hasFirestoreData);
+        const hasGistData = gistData && Object.keys(gistData).length > 0;
+        console.log('[initApp] hasLocalData:', hasLocalData, ', hasGistData:', hasGistData);
 
-        // 数据保护：如果 Firestore 数据为空但有本地数据，不覆盖本地
-        if (hasFirestoreData) {
-          // 检查 Firestore 数据完整性（至少有 _custom_companies 或有进度数据）
-          const firestoreCompanies = firestoreData._custom_companies || [];
-          const hasProgressData = Object.keys(firestoreData).some(k => !k.startsWith('_') && firestoreData[k]?.positions?.length > 0);
+        // 数据保护：如果 Gist 数据为空但有本地数据，不覆盖本地
+        if (hasGistData) {
+          // 检查 Gist 数据完整性（至少有 _custom_companies 或有进度数据）
+          const gistCompanies = gistData._custom_companies || [];
+          const hasProgressData = Object.keys(gistData).some(k => !k.startsWith('_') && gistData[k]?.positions?.length > 0);
           
-          if (firestoreCompanies.length > 0 || hasProgressData) {
-            // Firestore 数据有效，覆盖本地
-            saveStateToLocal(convertFirestoreDataToLocal(firestoreData));
+          if (gistCompanies.length > 0 || hasProgressData) {
+            // Gist 数据有效，覆盖本地
+            saveStateToLocal(convertGistDataToLocal(gistData));
             setSyncStatus("synced", "✅ 已从云端同步");
-            console.log('[initApp] Firestore 数据有效，已同步到本地');
+            console.log('[initApp] Gist 数据有效，已同步到本地');
           } else if (hasLocalData) {
-            // Firestore 数据无效但本地有数据，保留本地并上传
-            console.warn('[initApp] Firestore 数据不完整，保留本地数据并上传');
-            await syncToFirestore(localData);
+            // Gist 数据无效但本地有数据，保留本地并上传
+            console.warn('[initApp] Gist 数据不完整，保留本地数据并上传');
+            await syncToGist(localData);
             setSyncStatus("synced", "✅ 云端数据已更新");
           } else {
             setSyncStatus("synced", "✅ 同步码已绑定");
           }
         } else if (hasLocalData) {
           // 上传本地数据到云端
-          await syncToFirestore(localData);
+          await syncToGist(localData);
           setSyncStatus("synced", "✅ 本地数据已上传到云端");
         } else {
           setSyncStatus("synced", "✅ 同步码已绑定");
@@ -6871,7 +6706,7 @@ async function initApp() {
         // Setup real-time listener
         setupRealtimeListener();
         updateSyncCodeUI();
-        initMomoDefaults();
+        if (!hasGistData && !localData._defaults_initialized) initMomoDefaults();
         deduplicateCompanies();
         render();
 
@@ -6894,7 +6729,7 @@ async function initApp() {
 
 // ===== Online/Offline Detection =====
 window.addEventListener("online", () => {
-  if (firebaseReady && currentSyncHash) {
+  if (gistReady && currentSyncHash) {
     retrySync();
     setupRealtimeListener();
   }
@@ -7004,6 +6839,9 @@ window.addEventListener("offline", () => {
       </button>
       <button class="modal-btn modal-btn-primary" onclick="syncKeepLocal()" style="width:100%;text-align:left;padding:12px 16px;background:#4a6fa5;border-color:#4a6fa5">
         📤 保留本地数据，上传覆盖云端
+      </button>
+      <button class="modal-btn modal-btn-primary" onclick="syncMergeData()" style="width:100%;text-align:left;padding:12px 16px;background:#2d8a4e;border-color:#2d8a4e;color:white">
+        🟢 合并两端数据（推荐）
       </button>
       <button class="modal-btn" onclick="syncDismiss()" style="width:100%;text-align:left;padding:12px 16px">
         ⏸️ 暂时跳过，下次再提醒
@@ -7296,8 +7134,8 @@ window.addEventListener("offline", () => {
     const code = input.value.trim();
     if (!code) return;
 
-    // Ensure Firebase is ready
-    firebaseReady = true;
+    // Gist sync is always ready
+    gistReady = true;
 
     const btn = document.getElementById('onboardSyncBindBtn');
     btn.disabled = true;
@@ -8161,20 +7999,20 @@ window.addEventListener("offline", () => {
     }
   });
 
-  // Convert Firestore data format to local render format
-  // Firestore stores companies as top-level keys; local needs _custom_companies array
-  function convertFirestoreDataToLocal(firestoreData) {
-    if (!firestoreData || typeof firestoreData !== 'object') return firestoreData;
+  // Convert Gist data format to local render format
+  // Gist stores companies as top-level keys; local needs _custom_companies array
+  function convertGistDataToLocal(gistData) {
+    if (!gistData || typeof gistData !== 'object') return gistData;
     const keyToName = {};
     DATA.forEach(sec => {
       if (sec.items) sec.items.forEach(item => { keyToName[item.id] = item.company; });
     });
-    const converted = JSON.parse(JSON.stringify(firestoreData));
+    const converted = JSON.parse(JSON.stringify(gistData));
     if (!converted._custom_companies) {
       converted._custom_companies = [];
-      Object.keys(firestoreData).forEach(key => {
+      Object.keys(gistData).forEach(key => {
         if (key.startsWith('_')) return;
-        const entry = firestoreData[key];
+        const entry = gistData[key];
         if (!entry || typeof entry !== 'object') return;
         if (!entry.positions && !entry.note) return;
         const displayName = keyToName[key] || key;
@@ -8183,11 +8021,15 @@ window.addEventListener("offline", () => {
         });
       });
     }
+    // Preserve _defaults_initialized flag
+    if (!converted._defaults_initialized) {
+      converted._defaults_initialized = false;
+    }
     return converted;
   }
 
   // Expose to global scope so first script block (bindSyncCodeUI) can use it
-  window.convertFirestoreDataToLocal = convertFirestoreDataToLocal;
+  window.convertGistDataToLocal = convertGistDataToLocal;
 
   // ===== Persistent Guide Tooltips =====
   // Show guide tooltips if not dismissed
