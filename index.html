@@ -3712,6 +3712,8 @@ const MOMO_DEFAULTS = [
 const MOMO_SYNC_HASH = '3100486406b39efc3f3d3565bc97cc3b9e2d7b6e3427b194f4442ef4beb05b41';
 
 function initMomoDefaults() {
+  // Legacy templates must never be auto-added to a user's synced company list.
+  return;
   if (currentSyncHash !== MOMO_SYNC_HASH) return;
   
   const state = loadState();
