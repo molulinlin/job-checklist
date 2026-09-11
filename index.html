@@ -3090,7 +3090,7 @@ async function updatePasswordStatus() {
 }
 
 // Apply remote data when user clicks refresh (fallback for manual sync)
-function applyRemoteData() {
+async function applyRemoteData() {
   console.log('[applyRemoteData] 用户手动触发同步');
   if (window._pendingRemoteData) {
     saveStateToLocal(convertGistDataToLocal(window._pendingRemoteData));
