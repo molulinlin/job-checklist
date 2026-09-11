@@ -2564,6 +2564,14 @@
     <button class="settings-profile-save" onclick="saveProfileSettings()">保存求职方向</button>
   </div>
 
+  <div class="settings-profile-section">
+    <h4>🧹 数据维护</h4>
+    <div class="settings-hint" style="background:#fff8e8;padding:8px 10px;border-radius:6px;margin-bottom:8px;font-size:0.8rem;line-height:1.5;">
+      仅检查可能被旧版本误加入的模板公司。含投递记录、流程或个人备注的公司不会被删除。
+    </div>
+    <button class="settings-profile-save" onclick="openLegacyTemplateCleanupModal()">检查旧模板公司</button>
+  </div>
+
 
 </div>
 
@@ -2713,6 +2721,18 @@
     <div class="modal-actions">
       <button class="modal-btn" onclick="closeDateModal()">取消</button>
       <button class="modal-btn modal-btn-primary" onclick="saveDateModal()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Conservative cleanup for companies injected by the retired template loader -->
+<div class="modal-overlay" id="legacyTemplateCleanupModal">
+  <div class="modal-box">
+    <div class="modal-title">清理误加入的旧模板</div>
+    <div class="modal-desc" id="legacyTemplateCleanupDesc"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="closeLegacyTemplateCleanupModal()">取消</button>
+      <button class="modal-btn modal-btn-primary" id="legacyTemplateCleanupConfirm" onclick="confirmLegacyTemplateCleanup()">继续</button>
     </div>
   </div>
 </div>
@@ -3729,6 +3749,128 @@ const MOMO_DEFAULTS = [
     {id:'momo_致欧家居',section:'消费/零售',company:'致欧家居',position:'产品管培生，研发管培生，职能管培生，营销管培生，供应链管培生',location:'深圳, 郑州',deadline:'招满即止',priority:'low',priLabel:'⭐',links:[{text:'https://songmicshome.jobs.feishu.cn/index',url:'https://songmicshome.jobs.feishu.cn/index'}],notice:'有六险一金,餐饮补贴,节日福利,团建旅游,8k~15k*13',note:'春招·[\'电商\']'}
 ];
 const MOMO_SYNC_HASH = '3100486406b39efc3f3d3565bc97cc3b9e2d7b6e3427b194f4442ef4beb05b41';
+
+let legacyTemplateCleanupReport = null;
+let legacyTemplateCleanupStage = 0;
+
+function legacyTemplateMetadataMatches(company, template) {
+  if (!company || !template) return false;
+  const companyKeys = Object.keys(company);
+  const templateKeys = Object.keys(template);
+  return companyKeys.length === templateKeys.length &&
+    companyKeys.every(function(key) {
+      return Object.prototype.hasOwnProperty.call(template, key) &&
+        JSON.stringify(company[key]) === JSON.stringify(template[key]);
+    });
+}
+
+function hasOnlyEmptyTemplateState(itemState, template) {
+  if (itemState === undefined) return true;
+  if (!itemState || typeof itemState !== 'object' || Array.isArray(itemState)) return false;
+  if (!Object.keys(itemState).every(function(key) { return key === 'positions' || key === 'note'; })) return false;
+  if (itemState.positions !== undefined && (!Array.isArray(itemState.positions) || itemState.positions.length > 0)) return false;
+  const note = itemState.note || '';
+  return note === '' || note === (template.note || '');
+}
+
+function getLegacyTemplateCleanupReport(state) {
+  const templatesById = new Map(MOMO_DEFAULTS.map(function(template) { return [template.id, template]; }));
+  const templatesByName = new Map(MOMO_DEFAULTS.map(function(template) { return [normalizeCompanyName(template.company), template]; }));
+  const companies = Array.isArray(state._custom_companies) ? state._custom_companies : [];
+  const candidates = [];
+  let skipped = 0;
+
+  companies.forEach(function(company) {
+    const idTemplate = templatesById.get(company && company.id);
+    const nameTemplate = templatesByName.get(normalizeCompanyName(company && company.company));
+    if (!idTemplate && !nameTemplate) return;
+
+    // Only an untouched original template record is certain enough to remove.
+    if (!idTemplate || normalizeCompanyName(company.company) !== normalizeCompanyName(idTemplate.company) ||
+        !legacyTemplateMetadataMatches(company, idTemplate) || !hasOnlyEmptyTemplateState(state[company.id], idTemplate)) {
+      skipped++;
+      return;
+    }
+    candidates.push(company);
+  });
+
+  return { candidates: candidates, skipped: skipped };
+}
+
+function closeLegacyTemplateCleanupModal() {
+  document.getElementById('legacyTemplateCleanupModal').classList.remove('active');
+  legacyTemplateCleanupReport = null;
+  legacyTemplateCleanupStage = 0;
+}
+
+function openLegacyTemplateCleanupModal() {
+  legacyTemplateCleanupReport = getLegacyTemplateCleanupReport(loadState());
+  legacyTemplateCleanupStage = 0;
+  const count = legacyTemplateCleanupReport.candidates.length;
+  const desc = document.getElementById('legacyTemplateCleanupDesc');
+  const button = document.getElementById('legacyTemplateCleanupConfirm');
+  desc.textContent = count
+    ? '已确认 ' + count + ' 项可安全清理；另有 ' + legacyTemplateCleanupReport.skipped + ' 项疑似旧模板已跳过。含岗位、流程、个人备注或修改过资料的公司不会被删除。'
+    : '没有发现可确认可删除的旧模板。检测到 ' + legacyTemplateCleanupReport.skipped + ' 项疑似旧模板已保留，因为无法完全确认它们没有个人数据。';
+  button.textContent = count ? '查看清理确认' : '知道了';
+  document.getElementById('legacyTemplateCleanupModal').classList.add('active');
+}
+
+function confirmLegacyTemplateCleanup() {
+  const desc = document.getElementById('legacyTemplateCleanupDesc');
+  const button = document.getElementById('legacyTemplateCleanupConfirm');
+  if (!legacyTemplateCleanupReport || legacyTemplateCleanupStage === 2) {
+    closeLegacyTemplateCleanupModal();
+    return;
+  }
+  if (!legacyTemplateCleanupReport.candidates.length) {
+    closeLegacyTemplateCleanupModal();
+    return;
+  }
+  if (legacyTemplateCleanupStage === 0) {
+    legacyTemplateCleanupStage = 1;
+    desc.textContent = '最后确认：将从本机“我的投递”中清理 ' + legacyTemplateCleanupReport.candidates.length +
+      ' 项确认无个人数据的旧模板。清理前会保存完整本机备份；之后只会按现有同步流程尝试同步，不会直接覆盖云端。';
+    button.textContent = '确认清理 ' + legacyTemplateCleanupReport.candidates.length + ' 项';
+    return;
+  }
+
+  const state = loadState();
+  const latestReport = getLegacyTemplateCleanupReport(state);
+  if (!latestReport.candidates.length) {
+    legacyTemplateCleanupReport = latestReport;
+    legacyTemplateCleanupStage = 2;
+    desc.textContent = '数据已发生变化，现已没有可确认清理的旧模板。本次未修改任何数据。';
+    button.textContent = '关闭';
+    return;
+  }
+
+  try {
+    localStorage.setItem('jobpulse_legacy_template_cleanup_backup_' + Date.now(), JSON.stringify(state));
+  } catch (error) {
+    legacyTemplateCleanupStage = 2;
+    desc.textContent = '未能创建本机备份，因此没有执行清理。请先释放浏览器存储空间后重试。';
+    button.textContent = '关闭';
+    return;
+  }
+
+  const candidateIds = new Set(latestReport.candidates.map(function(company) { return company.id; }));
+  state._custom_companies = state._custom_companies.filter(function(company) { return !candidateIds.has(company.id); });
+  if (!Array.isArray(state._deleted_companies)) state._deleted_companies = [];
+  latestReport.candidates.forEach(function(company) {
+    delete state[company.id];
+    [company.id, normalizeCompanyName(company.company)].forEach(function(value) {
+      if (!state._deleted_companies.includes(value)) state._deleted_companies.push(value);
+    });
+  });
+  saveState(state);
+  render();
+
+  legacyTemplateCleanupStage = 2;
+  desc.textContent = '已在此设备清理 ' + latestReport.candidates.length + ' 项，并已保存完整本机备份。页面会按当前已绑定的同步方式尝试同步；如同步提示报错，本机清理和备份仍然保留。';
+  button.textContent = '完成';
+  showToast('已清理 ' + latestReport.candidates.length + ' 项旧模板');
+}
 
 function initMomoDefaults() {
   // Legacy templates must never be auto-added to a user's synced company list.
