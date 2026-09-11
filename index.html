@@ -305,6 +305,14 @@
   .search-no-result-icon { font-size: 2.5rem; margin-bottom: 12px; opacity: 0.5; }
   .search-no-result-text { margin-bottom: 8px; }
   .search-no-result-hint { font-size: 0.8rem; color: #aaa; }
+
+  /* Read-only public company library */
+  .library-search-input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
+  .library-results { max-height: 52vh; overflow-y: auto; margin-top: 12px; display: grid; gap: 8px; }
+  .library-result { border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+  .library-result-title { font-weight: 700; }
+  .library-result-meta { color: var(--text-secondary); font-size: 0.78rem; line-height: 1.55; margin-top: 4px; }
+  .library-result-actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
   
   /* Hide non-matching cards during search */
   .card.search-hidden { display: none !important; }
@@ -2669,6 +2677,7 @@
 <!-- Global Action Bar (shown when companies exist) -->
 <div class="global-action-bar" id="globalActionBar" style="display:none;">
   <button class="gab-add" onclick="openCompanyModal()">+ 添加公司</button>
+  <button class="gab-search" onclick="openCompanyLibrary()">📚 搜索公司库</button>
   <button class="gab-ai" onclick="aiRecommendDirect()">🤖 AI 推荐公司</button>
   <button class="gab-search" onclick="showSearchBar()" title="搜索公司（Ctrl+F）">🔍 搜索</button>
 </div>
@@ -5201,6 +5210,166 @@ function findFeishuUrl(companyName) {
   return null;
 }
 
+// ===== Read-only company library =====
+let companyLibrary = [];
+let companyLibraryLoading = null;
+
+function normalizeCompanyName(name) {
+  return String(name || '').replace(/\s/g, '').toLowerCase();
+}
+
+function normalizeLibraryLinks(links) {
+  return (Array.isArray(links) ? links : []).filter(function(link) {
+    return link && /^https?:\/\//i.test(link.url || '');
+  }).map(function(link) {
+    return { text: String(link.text || '投递入口'), url: String(link.url) };
+  });
+}
+
+function addLibraryEntry(entries, knownNames, entry) {
+  if (!entry || !entry.company) return;
+  const key = normalizeCompanyName(entry.company);
+  const links = normalizeLibraryLinks(entry.links);
+  const existing = knownNames.get(key);
+  if (existing) {
+    if (!existing.links.length && links.length) existing.links = links;
+    if (!existing.position && entry.position) existing.position = entry.position;
+    if (!existing.location && entry.location) existing.location = entry.location;
+    if (!existing.notice && entry.notice) existing.notice = entry.notice;
+    return;
+  }
+  const item = {
+    id: String(entry.id || 'library_' + key),
+    company: String(entry.company), section: String(entry.section || '其他'),
+    position: String(entry.position || ''), location: String(entry.location || ''),
+    deadline: String(entry.deadline || ''), priority: entry.priority || 'mid',
+    priLabel: entry.priLabel || '⭐⭐', links: links,
+    notice: String(entry.notice || ''), note: String(entry.note || '')
+  };
+  entries.push(item);
+  knownNames.set(key, item);
+}
+
+async function loadCompanyLibrary() {
+  if (companyLibrary.length) return companyLibrary;
+  if (companyLibraryLoading) return companyLibraryLoading;
+  companyLibraryLoading = fetch('./company_database.json', { cache: 'no-cache' })
+    .then(function(response) {
+      if (!response.ok) throw new Error('公司资料库加载失败 (' + response.status + ')');
+      return response.json();
+    })
+    .then(function(data) {
+      const entries = [];
+      const knownNames = new Map();
+      (data.companies || []).forEach(function(item) { addLibraryEntry(entries, knownNames, item); });
+      (typeof MOMO_DEFAULTS === 'undefined' ? [] : MOMO_DEFAULTS).forEach(function(item) { addLibraryEntry(entries, knownNames, item); });
+      (typeof REFERRAL_DB === 'undefined' ? [] : REFERRAL_DB).forEach(function(row) {
+        addLibraryEntry(entries, knownNames, {
+          id: 'referral_' + normalizeCompanyName(row[0]), company: row[0], section: String(row[2] || '其他').split('|')[0],
+          position: row[9], location: row[8], deadline: row[5], links: row[4] ? [{ text: '内推/投递入口', url: row[4] }] : [],
+          notice: row[6], note: row[3]
+        });
+      });
+      companyLibrary = entries;
+      console.log('[companyLibrary] 已加载 ' + entries.length + ' 条只读资料');
+      return entries;
+    })
+    .catch(function(error) {
+      companyLibraryLoading = null;
+      throw error;
+    });
+  return companyLibraryLoading;
+}
+
+function openCompanyLibrary() {
+  const modal = document.getElementById('companyLibraryModal');
+  const input = document.getElementById('companyLibraryInput');
+  const results = document.getElementById('companyLibraryResults');
+  if (!modal || !input || !results) return;
+  modal.classList.add('active');
+  input.value = '';
+  results.textContent = '正在加载公司资料库…';
+  loadCompanyLibrary().then(function() {
+    results.textContent = '已加载 ' + companyLibrary.length + ' 条资料。输入关键词开始搜索。';
+    input.focus();
+  }).catch(function(error) {
+    results.textContent = error.message + '，请稍后重试。';
+  });
+}
+
+function closeCompanyLibrary() {
+  document.getElementById('companyLibraryModal')?.classList.remove('active');
+}
+
+function renderCompanyLibraryResults() {
+  const input = document.getElementById('companyLibraryInput');
+  const results = document.getElementById('companyLibraryResults');
+  if (!input || !results || !companyLibrary.length) return;
+  const query = normalizeCompanyName(input.value);
+  if (!query) {
+    results.textContent = '已加载 ' + companyLibrary.length + ' 条资料。输入关键词开始搜索。';
+    return;
+  }
+  const matches = companyLibrary.filter(function(item) {
+    return [item.company, item.section, item.position, item.location, item.deadline, item.notice, item.note]
+      .some(function(value) { return normalizeCompanyName(value).includes(query); });
+  }).slice(0, 50);
+  results.innerHTML = '';
+  if (!matches.length) {
+    results.textContent = '没有找到匹配的公司或岗位。';
+    return;
+  }
+  matches.forEach(function(item) {
+    const card = document.createElement('div');
+    card.className = 'library-result';
+    const title = document.createElement('div');
+    title.className = 'library-result-title';
+    title.textContent = item.company;
+    const meta = document.createElement('div');
+    meta.className = 'library-result-meta';
+    meta.textContent = [item.section, item.position, item.location, item.deadline].filter(Boolean).join(' · ');
+    const actions = document.createElement('div');
+    actions.className = 'library-result-actions';
+    const addButton = document.createElement('button');
+    addButton.className = 'modal-btn modal-btn-primary';
+    addButton.textContent = '加入我的投递';
+    addButton.addEventListener('click', function() { addCompanyFromLibrary(item.id); });
+    actions.appendChild(addButton);
+    if (item.links[0]) {
+      const link = document.createElement('a');
+      link.href = item.links[0].url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = item.links[0].text || '打开投递入口';
+      actions.appendChild(link);
+    }
+    card.append(title, meta, actions);
+    results.appendChild(card);
+  });
+}
+
+function addCompanyFromLibrary(id) {
+  const item = companyLibrary.find(function(entry) { return entry.id === id; });
+  if (!item) return;
+  const state = loadState();
+  if (!Array.isArray(state._custom_companies)) state._custom_companies = [];
+  const existing = state._custom_companies.find(function(entry) {
+    return normalizeCompanyName(entry.company) === normalizeCompanyName(item.company);
+  });
+  if (existing) {
+    closeCompanyLibrary();
+    render();
+    setTimeout(function() { scrollToCard(existing.id, true); }, 50);
+    return;
+  }
+  const copy = JSON.parse(JSON.stringify(item));
+  state._custom_companies.push(copy);
+  saveState(state);
+  closeCompanyLibrary();
+  render();
+  setTimeout(function() { scrollToCard(copy.id, true); }, 50);
+}
+
 // ===== AI Fill Company =====
 async function aiFillCompany() {
   const companyInput = document.getElementById("cmAiCompany");
@@ -5458,18 +5627,6 @@ function submitCompanyModal() {
     render();
     setTimeout(() => scrollToCard(dupCompany.id, true), 100);
     return;
-  }
-
-  // Duplicate check: MOMO default companies
-  if (typeof MOMO_DEFAULTS !== 'undefined') {
-    const dupDefault = MOMO_DEFAULTS.find(d => (d.company || '').replace(/\s/g, '').toLowerCase() === normalizedCompany);
-    if (dupDefault) {
-      showToast('「' + dupDefault.company + '」已在列表中，已定位到该卡片');
-      closeCompanyModal();
-      render();
-      setTimeout(() => scrollToCard(dupDefault.id, true), 100);
-      return;
-    }
   }
 
   st._custom_companies.push(newCompany);
@@ -6132,6 +6289,7 @@ function render() {
       <div class="empty-state-desc">添加你的第一个公司，开始记录求职投递进度吧</div>
       <div class="empty-state-actions">
         <button class="empty-state-btn-primary" onclick="openCompanyModal()">+ 添加公司</button>
+        <button class="empty-state-btn-secondary" onclick="openCompanyLibrary()">📚 搜索公司库</button>
         <button class="empty-state-btn-secondary" onclick="aiRecommendDirect()">🤖 AI 推荐公司</button>
       </div>
     `;
@@ -6784,6 +6942,16 @@ window.addEventListener("offline", () => {
 </script>
 
 <!-- Add company modal -->
+<div class="modal-overlay" id="companyLibraryModal">
+  <div class="modal-box" style="max-width:680px">
+    <div class="modal-title">📚 公司资料库</div>
+    <div class="modal-desc" style="color:#555;line-height:1.6">资料库只用于查询，不会自动加入“我的投递”。点击结果中的“加入我的投递”后，才会保存该公司。</div>
+    <input class="library-search-input" id="companyLibraryInput" type="search" placeholder="搜索公司、岗位、行业或城市" oninput="renderCompanyLibraryResults()">
+    <div class="library-results" id="companyLibraryResults"></div>
+    <div class="modal-actions" style="margin-top:16px"><button class="modal-btn" onclick="closeCompanyLibrary()">关闭</button></div>
+  </div>
+</div>
+
 <div class="company-modal-overlay" id="companyModal">
   <div class="company-modal-box">
     <div class="modal-title">✨ 添加新公司</div>
