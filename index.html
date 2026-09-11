@@ -187,6 +187,47 @@
     background: #f0f0ec;
     color: var(--text-secondary);
   }
+  .direction-help-tip {
+    position: relative;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    margin: -2px 4px 10px;
+    padding: 10px 34px 10px 12px;
+    border: 1px solid #cfe4c8;
+    border-radius: 9px;
+    background: #f0f8e8;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.55;
+  }
+  .direction-help-tip::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    left: 28px;
+    width: 10px;
+    height: 10px;
+    background: #f0f8e8;
+    border-top: 1px solid #cfe4c8;
+    border-left: 1px solid #cfe4c8;
+    transform: rotate(45deg);
+  }
+  .direction-help-tip strong { color: var(--text); }
+  .direction-help-tip-close {
+    position: absolute;
+    top: 5px;
+    right: 7px;
+    border: 0;
+    padding: 4px 6px;
+    background: transparent;
+    color: #8aa083;
+    font: inherit;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .direction-help-tip-close:hover { color: var(--text); }
 
 /* Progress bar */
   .progress-wrap {
@@ -2527,44 +2568,6 @@
   <button class="settings-save-btn" onclick="saveSettingsApiKey()">保存</button>
 
   <div class="settings-profile-section">
-    <h4>🎯 求职方向</h4>
-    <div class="settings-hint" style="background:#f0f8e8;padding:8px 10px;border-radius:6px;margin-bottom:8px;font-size:0.8rem;line-height:1.5;">
-      💡 <strong>更新意向岗位/行业？</strong>在此修改即可。已有的公司数据<strong>不会被删除</strong>，会自动按新行业分组显示。AI 推荐和 AI 填写也会按新方向匹配。
-    </div>
-    <label>目标岗位</label>
-    <input type="text" id="settingsPosition" placeholder="如：游戏发行、市场营销、品牌策划">
-    <div class="settings-hint">修改后 AI 助手的推荐和填写将自动匹配新岗位</div>
-    <label>目标行业</label>
-    <select id="settingsIndustry">
-      <option value="游戏">游戏</option>
-      <option value="互联网">互联网</option>
-      <option value="科技">科技</option>
-      <option value="AI">AI</option>
-      <option value="消费电子">消费电子</option>
-      <option value="硬件制造">硬件制造</option>
-      <option value="电商">电商</option>
-      <option value="汽车出行">汽车出行</option>
-      <option value="新能源">新能源</option>
-      <option value="机器人">机器人</option>
-      <option value="通信">通信</option>
-      <option value="外企">外企</option>
-      <option value="金融">金融</option>
-      <option value="教培">教培</option>
-      <option value="影像">影像</option>
-      <option value="央企国企">央企国企</option>
-      <option value="航天">航天</option>
-      <option value="医药">医药</option>
-      <option value="制造业">制造业</option>
-      <option value="消费品">消费品</option>
-      <option value="__custom__">️ 自定义行业...</option>
-      <option value="其他">不限行业</option>
-    </select>
-    <input type="text" id="settingsIndustryCustom" placeholder="输入自定义行业名称" style="display:none;">
-    <div class="settings-hint">切换行业后，原有公司数据保留不变，在新行业下方独立分区展示</div>
-    <button class="settings-profile-save" onclick="saveProfileSettings()">保存求职方向</button>
-  </div>
-
-  <div class="settings-profile-section">
     <h4>🧹 数据维护</h4>
     <div class="settings-hint" style="background:#fff8e8;padding:8px 10px;border-radius:6px;margin-bottom:8px;font-size:0.8rem;line-height:1.5;">
       仅检查可能被旧版本误加入的模板公司。含投递记录、流程或个人备注的公司不会被删除。
@@ -2623,6 +2626,12 @@
     </span>
   </div>
   <span class="direction-edit-hint">修改</span>
+</div>
+
+<div class="direction-help-tip" id="directionHelpTip" style="display:none;">
+  <span>💡</span>
+  <span><strong>更新意向岗位/行业？</strong>点击上方“修改”即可。已有公司不会被删除，会按新行业分组显示；AI 推荐和自动填充也会按新方向匹配。</span>
+  <button class="direction-help-tip-close" onclick="dismissDirectionHelpTip()" title="关闭提示" aria-label="关闭求职方向提示">×</button>
 </div>
 
 <!-- Direction Inline Editor (hidden by default) -->
@@ -6076,6 +6085,16 @@ function getUserPosition() {
   } catch(e) { return ''; }
 }
 
+function updateDirectionHelpTip() {
+  const tip = document.getElementById('directionHelpTip');
+  if (tip) tip.style.display = localStorage.getItem('jobpulse_direction_help_tip_closed') ? 'none' : 'flex';
+}
+
+function dismissDirectionHelpTip() {
+  localStorage.setItem('jobpulse_direction_help_tip_closed', '1');
+  updateDirectionHelpTip();
+}
+
 // Update direction bar display
 function updateDirectionBar() {
   const bar = document.getElementById('directionBar');
@@ -6100,6 +6119,7 @@ function updateDirectionBar() {
   } else {
     display.innerHTML = '<span class="direction-placeholder">点击设置求职方向</span>';
   }
+  updateDirectionHelpTip();
 }
 
 // Toggle direction editor visibility
@@ -6112,6 +6132,8 @@ function toggleDirectionEditor() {
   if (isHidden) {
     // Show editor and populate with current values
     bar.style.display = 'none';
+    const tip = document.getElementById('directionHelpTip');
+    if (tip) tip.style.display = 'none';
     editor.style.display = 'block';
     populateDirectionEditor();
   }
@@ -6166,6 +6188,7 @@ function cancelDirectionEditor() {
   const editor = document.getElementById('directionEditor');
   if (bar) bar.style.display = 'flex';
   if (editor) editor.style.display = 'none';
+  updateDirectionHelpTip();
 }
 
 // Save direction
@@ -8235,26 +8258,6 @@ window.addEventListener("offline", () => {
       // Load existing API key into input
       const existingKey = localStorage.getItem('deepseek_api_key') || '';
       document.getElementById('settingsApiKey').value = existingKey;
-      // Load existing profile into inputs
-      try {
-        const profile = JSON.parse(localStorage.getItem('user_profile') || '{}');
-        const posInput = document.getElementById('settingsPosition');
-        const indSelect = document.getElementById('settingsIndustry');
-        const indCustom = document.getElementById('settingsIndustryCustom');
-        if (posInput) posInput.value = (profile.position && profile.position !== '未指定') ? profile.position : '';
-        if (indSelect) {
-          const currentIndustry = getUserIndustry() || '未指定';
-          const options = Array.from(indSelect.options).map(o => o.value);
-          if (options.includes(currentIndustry)) {
-            indSelect.value = currentIndustry;
-          } else if (currentIndustry && currentIndustry !== '未指定' && currentIndustry !== '其他') {
-            indSelect.value = '__custom__';
-            if (indCustom) { indCustom.style.display = ''; indCustom.value = currentIndustry; }
-          } else {
-            indSelect.value = '其他';
-          }
-        }
-      } catch(e) {}
       // Update diagnostic info
       try {
         const diagState = loadStateFromLocal();
@@ -8306,51 +8309,8 @@ window.addEventListener("offline", () => {
     }
   };
 
-  // Save profile settings (industry/position)
-  window.saveProfileSettings = function() {
-    const position = document.getElementById('settingsPosition').value.trim();
-    const indSelect = document.getElementById('settingsIndustry');
-    const indCustom = document.getElementById('settingsIndustryCustom');
-    let industry = indSelect.value;
-    if (industry === '__custom__') {
-      industry = indCustom.value.trim() || '其他';
-    }
-
-    const profile = JSON.parse(localStorage.getItem('user_profile') || '{}');
-    // Capture old values BEFORE updating
-    const oldIndustry = profile.industry || '未指定';
-    const oldPosition = profile.position || '未指定';
-
-    profile.position = position || '未指定';
-    profile.industry = industry;
-    localStorage.setItem('user_profile', JSON.stringify(profile));
-
-    // Determine what changed for informative toast
-    const changed = [];
-    if ((position || '未指定') !== oldPosition) changed.push('岗位');
-    if (industry !== oldIndustry) changed.push('行业');
-
-    // Build informative toast
-    let msg = '✅ 求职方向已更新';
-    if (changed.length > 0) {
-      msg += '（' + changed.join('、') + '已变更，已有数据不受影响）';
-    }
-    showToast(msg);
-    document.getElementById('settingsPanel').classList.remove('active');
-    // Re-render to apply industry classification
-    render();
-  };
-
   // Handle custom industry dropdown toggle
   (function() {
-    const settingsInd = document.getElementById('settingsIndustry');
-    const settingsCustom = document.getElementById('settingsIndustryCustom');
-    if (settingsInd && settingsCustom) {
-      settingsInd.addEventListener('change', function() {
-        settingsCustom.style.display = this.value === '__custom__' ? '' : 'none';
-        if (this.value !== '__custom__') settingsCustom.value = '';
-      });
-    }
     const onboardInd = document.getElementById('aiOnboardIndustry');
     const onboardCustom = document.getElementById('aiOnboardIndustryCustom');
     if (onboardInd && onboardCustom) {
