@@ -3789,17 +3789,6 @@ const MOMO_SYNC_HASH = '3100486406b39efc3f3d3565bc97cc3b9e2d7b6e3427b194f4442ef4
 let legacyTemplateCleanupReport = null;
 let legacyTemplateCleanupStage = 0;
 
-function legacyTemplateMetadataMatches(company, template) {
-  if (!company || !template) return false;
-  const companyKeys = Object.keys(company);
-  const templateKeys = Object.keys(template);
-  return companyKeys.length === templateKeys.length &&
-    companyKeys.every(function(key) {
-      return Object.prototype.hasOwnProperty.call(template, key) &&
-        JSON.stringify(company[key]) === JSON.stringify(template[key]);
-    });
-}
-
 function hasOnlyEmptyTemplateState(itemState, template) {
   if (itemState === undefined) return true;
   if (!itemState || typeof itemState !== 'object' || Array.isArray(itemState)) return false;
@@ -3821,9 +3810,9 @@ function getLegacyTemplateCleanupReport(state) {
     const nameTemplate = templatesByName.get(normalizeCompanyName(company && company.company));
     if (!idTemplate && !nameTemplate) return;
 
-    // Only an untouched original template record is certain enough to remove.
+    // Keep the original template identity and personal-data checks, but allow stale public metadata.
     if (!idTemplate || normalizeCompanyName(company.company) !== normalizeCompanyName(idTemplate.company) ||
-        !legacyTemplateMetadataMatches(company, idTemplate) || !hasOnlyEmptyTemplateState(state[company.id], idTemplate)) {
+        !hasOnlyEmptyTemplateState(state[company.id], idTemplate)) {
       skipped++;
       return;
     }
@@ -3846,7 +3835,7 @@ function openLegacyTemplateCleanupModal() {
   const desc = document.getElementById('legacyTemplateCleanupDesc');
   const button = document.getElementById('legacyTemplateCleanupConfirm');
   desc.textContent = count
-    ? '已确认 ' + count + ' 项可安全清理；另有 ' + legacyTemplateCleanupReport.skipped + ' 项疑似旧模板已跳过。含岗位、流程、个人备注或修改过资料的公司不会被删除。'
+    ? '已确认 ' + count + ' 项可安全清理；另有 ' + legacyTemplateCleanupReport.skipped + ' 项疑似旧模板已跳过。仅需匹配旧模板原始编号和公司名；含岗位、流程或个人备注的公司不会被删除。'
     : '没有发现可确认可删除的旧模板。检测到 ' + legacyTemplateCleanupReport.skipped + ' 项疑似旧模板已保留，因为无法完全确认它们没有个人数据。';
   button.textContent = count ? '查看清理确认' : '知道了';
   document.getElementById('legacyTemplateCleanupModal').classList.add('active');
