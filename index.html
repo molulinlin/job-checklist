@@ -2800,6 +2800,33 @@ const STATUSES = [
   "淘汰"
 ];
 
+// Reusable career-priority model, adapted from the original game-industry ranking.
+const CAREER_PRIORITY_DIMENSIONS = [
+  { key: 'businessStrength', label: '业务基础与资源', weight: 15, criterion: '主营业务/核心产品或服务、营收或资金稳定性、资源与客户基础' },
+  { key: 'growthOutlook', label: '成长前景', weight: 15, criterion: '业务增长趋势、新业务管线、赛道前景与技术/市场布局' },
+  { key: 'brandPosition', label: '行业地位与品牌', weight: 14, criterion: '行业影响力、雇主品牌、该经历对后续求职的认可度' },
+  { key: 'compensation', label: '薪资竞争力', weight: 13, criterion: '校招薪资、奖金、股权及福利的综合竞争力' },
+  { key: 'roleStrength', label: '目标职能实力', weight: 11, criterion: '与用户目标岗位相关的团队实力、方法论、代表成果与岗位质量' },
+  { key: 'globalization', label: '国际化程度', weight: 10, criterion: '海外业务、全球客户或团队、跨区域发展机会' },
+  { key: 'developmentSystem', label: '培养与发展体系', weight: 8, criterion: '校招培养、导师机制、晋升路径和新人发展机会' },
+  { key: 'workLifeBalance', label: '工作强度与WLB', weight: 6, criterion: '工时、休假、加班文化及公开口碑' },
+  { key: 'applicationFriendliness', label: '投递友好度', weight: 4, criterion: '岗位/HC数量、对用户背景的接受度、流程和投递限制' },
+  { key: 'locationLife', label: '城市与生活质量', weight: 4, criterion: '办公城市、生活成本、通勤与人才政策' }
+];
+
+function calculateCareerPriority(assessment) {
+  const scores = assessment && assessment.scores;
+  if (!scores || typeof scores !== 'object') return null;
+  let total = 0;
+  for (const dimension of CAREER_PRIORITY_DIMENSIONS) {
+    const score = Number(scores[dimension.key]);
+    if (!Number.isFinite(score) || score < 0 || score > 10) return null;
+    total += score * dimension.weight / 10;
+  }
+  total = Math.round(total);
+  return { score: total, priority: total >= 70 ? 'high' : total >= 45 ? 'mid' : 'low' };
+}
+
 const INTERVIEW_STATUSES = ["笔试", "群面", "一面", "二面", "三面", "HR面"];
 
 const STATUS_DOT_CLASS = {
@@ -5539,7 +5566,13 @@ async function aiFillCompany() {
       userTargetPosition = (profile.position || '').replace(/\s/g, '');
     } catch(e) {}
 
-    const systemPrompt = '你是一个求职助手。请根据用户提供的公司名称返回JSON格式的信息。只返回JSON，不要其他内容。';
+    const systemPrompt = '你是一个求职助手。请根据用户提供的公司名称返回JSON格式的信息。只返回JSON，不要其他内容。公司评价只能依据公开可验证信息；信息不足时请给中性分5，不得编造。';
+    const priorityScoreShape = CAREER_PRIORITY_DIMENSIONS.map(function(dimension) {
+      return '    "' + dimension.key + '": 0';
+    }).join(',\n');
+    const priorityCriteria = CAREER_PRIORITY_DIMENSIONS.map(function(dimension) {
+      return '- ' + dimension.key + '（' + dimension.label + '，权重' + dimension.weight + '%）：' + dimension.criterion;
+    }).join('\n');
     let userPrompt = '请为"' + company + '"公司提供以下信息，返回JSON格式：\n' +
       '{\n' +
       '  "website": "校招/招聘官网链接（必须是该公司校园招聘或招聘专区的URL，不是公司主页）",\n' +
@@ -5548,8 +5581,13 @@ async function aiFillCompany() {
       '  "positions": ["推荐岗位1", "推荐岗位2", "推荐岗位3"],\n' +
       '  "location": "工作城市/地点（如：北京、上海、远程）",\n' +
       '  "deadline": "投递截止日期（如：2026-10-31 或 招满即止）",\n' +
-      '  "notice": "投递注意事项（1-2条，用分号分隔）"\n' +
-      '}\n';
+      '  "notice": "投递注意事项（1-2条，用分号分隔）",\n' +
+      '  "priorityAssessment": {\n' +
+      '    "scores": {\n' + priorityScoreShape + '\n    },\n' +
+      '    "summary": "不超过40字的评分依据"\n' +
+      '  }\n' +
+      '}\n' +
+      '评分规则：scores 中每项必须是0到10的数字；依据公开可验证信息评分，无法确认时填5，不得编造。\n' + priorityCriteria + '\n';
     if (userTargetPosition && userTargetPosition !== '未指定') {
       userPrompt += '用户求职目标岗位是"' + userTargetPosition + '"，请优先推荐与" ' + userTargetPosition + '"匹配的岗位，不要推荐无关岗位。\n';
     }
@@ -5575,7 +5613,7 @@ async function aiFillCompany() {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0.7,
+        temperature: 0.2,
         max_tokens: 1500
       })
     });
@@ -5597,6 +5635,9 @@ async function aiFillCompany() {
     }
 
     if (!parsed) throw new Error('AI 返回格式解析失败');
+
+    // The model supplies evidence-based dimension scores; priority is calculated locally.
+    const priorityAssessment = calculateCareerPriority(parsed.priorityAssessment);
 
     // Fill form fields — 已有用户输入的不覆盖
     document.getElementById("cmCompany").value = company;
@@ -5621,7 +5662,17 @@ async function aiFillCompany() {
     }
     if (noticeToFill) document.getElementById("cmNotice").value = noticeToFill;
 
+    if (priorityAssessment) {
+      document.getElementById("cmPriority").value = priorityAssessment.priority;
+    }
+
     let msg = '<div class="cm-ai-success">✅ AI 已填充信息，你可以在下方修改后提交</div>';
+    if (priorityAssessment) {
+      const priorityText = { high: '高', mid: '中', low: '低' }[priorityAssessment.priority];
+      msg += '<div style="font-size:0.74rem;color:var(--text-secondary);margin-top:4px;">📊 10维加权评分 ' + priorityAssessment.score + '/100，已建议为“' + priorityText + '”优先级（提交前可调整）</div>';
+    } else {
+      msg += '<div style="font-size:0.74rem;color:var(--text-secondary);margin-top:4px;">ℹ️ 评分信息不完整，已保留你原先选择的优先级</div>';
+    }
     if (parsed.positions && parsed.positions.length > 0) {
       const recText = parsed.positions.join('、');
       if (userHasPosition) {
