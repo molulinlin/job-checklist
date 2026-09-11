@@ -2737,8 +2737,18 @@ function _initIndustryKeywords() {
 
 // ===== Gist Sync Configuration =====
 const GIST_ID = '8d3ff1e542daaf7d59b13d80b2912a44';
+const GIST_FILE = 'jobpulse_sync.json';
 const GIST_RAW_URL = 'https://gist.githubusercontent.com/molulinlin/' + GIST_ID + '/raw/jobpulse_sync.json';
 const GIST_API_URL = 'https://api.github.com/gists/' + GIST_ID;
+
+// Accept both the legacy raw-state file and the short-lived wrapped format.
+function getGistState(parsed) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  if (Object.prototype.hasOwnProperty.call(parsed, 'data')) {
+    return parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data) ? parsed.data : null;
+  }
+  return parsed;
+}
 
 // ===== App State =====
 let currentSyncCode = null;
@@ -2845,8 +2855,8 @@ async function bindSyncCodeUI() {
       if (response.ok) {
         const gistContent = await response.text();
         const parsed = JSON.parse(gistContent);
-        if (parsed && parsed.data) {
-          gistData = parsed.data;
+        gistData = getGistState(parsed);
+        if (gistData) {
           console.log('[bindSyncCodeUI] Gist 有数据, keys:', Object.keys(gistData));
         } else { console.log('[bindSyncCodeUI] Gist 无数据'); }
       } else { console.log('[bindSyncCodeUI] Gist 无数据 (status: ' + response.status + ')'); }
@@ -2959,8 +2969,8 @@ async function pollRemoteSync() {
     if (!response.ok) return;
     const gistContent = await response.text();
     const parsed = JSON.parse(gistContent);
-    if (parsed && parsed.data) {
-      const remoteData = parsed.data;
+    const remoteData = getGistState(parsed);
+    if (remoteData) {
       const localData = loadStateFromLocal();
       const remoteJson = JSON.stringify(remoteData);
       const localJson = JSON.stringify(localData);
@@ -2975,7 +2985,7 @@ async function pollRemoteSync() {
         console.log('[pollSync] 数据一致，无需更新');
       }
     } else {
-      console.log('[pollSync] 远程文档不存在或无 data 字段');
+      console.log('[pollSync] 远程文档不存在或格式无效');
     }
   } catch (err) {
     console.warn("[pollSync] 拉取失败:", err);
@@ -4056,17 +4066,32 @@ async function syncToGist(state) {
     return;
   }
   try {
+    let gistToken = localStorage.getItem('gist_token');
+    if (!gistToken) {
+      gistToken = await showPasswordPrompt({
+        title: '启用云端同步',
+        desc: '请输入 GitHub 同步令牌。它只保存在当前浏览器，用于把你的数据写回自己的同步文件。',
+        placeholder: 'GitHub token',
+        isPassword: true
+      });
+      if (gistToken) localStorage.setItem('gist_token', gistToken);
+    }
+    if (!gistToken) {
+      pendingSync = true;
+      setSyncStatus('error', '⚠️ 未设置同步令牌，数据已保存在本地');
+      return;
+    }
     setSyncStatus("syncing", " 同步中...");
     _isLocalWrite = true;
     console.log('[syncToGist] 开始写入 Gist');
     const patchData = {};
     patchData[GIST_FILE] = {
-      content: JSON.stringify({ data: state, updatedAt: new Date().toISOString() })
+      content: JSON.stringify(state)
     };
     const response = await fetch(GIST_API_URL, {
       method: 'PATCH',
       headers: {
-        'Authorization': 'token ' + GIST_TOKEN,
+        'Authorization': 'token ' + gistToken,
         'Content-Type': 'application/json',
         'Accept': 'application/vnd.github.v3+json'
       },
@@ -4101,7 +4126,7 @@ async function loadFromGist() {
     }
     const gistContent = await response.text();
     const parsed = JSON.parse(gistContent);
-    const data = parsed.data || null;
+    const data = getGistState(parsed);
     console.log('[loadFromGist] ✅ 读取成功, keys:', data ? Object.keys(data) : 'null');
     return data;
   } catch (err) {
@@ -6621,6 +6646,7 @@ async function initApp() {
 
         const hasLocalData = localData && Object.keys(localData).length > 0;
         const hasGistData = gistData && Object.keys(gistData).length > 0;
+        let hasSyncConflict = false;
 
         // 数据保护：检查 Gist 数据完整性
         if (hasGistData) {
@@ -6628,16 +6654,23 @@ async function initApp() {
           const hasProgressData = Object.keys(gistData).some(k => !k.startsWith('_') && gistData[k]?.positions?.length > 0);
           
           if (gistCompanies.length > 0 || hasProgressData) {
-            // Gist 数据有效，覆盖本地
-            saveStateToLocal(convertGistDataToLocal(gistData));
-            console.log('[initApp] 恢复绑定：Gist 数据有效，已同步到本地');
+            const remoteState = convertGistDataToLocal(gistData);
+            if (hasLocalData && JSON.stringify(remoteState) !== JSON.stringify(localData)) {
+              _pendingSyncData = gistData;
+              hasSyncConflict = true;
+              showSyncConflictModal();
+              console.warn('[initApp] 恢复绑定：本地与云端数据不同，等待用户选择');
+            } else if (!hasLocalData) {
+              saveStateToLocal(remoteState);
+              console.log('[initApp] 恢复绑定：Gist 数据有效，已同步到本地');
+            }
           } else if (hasLocalData) {
             // Gist 数据无效，保留本地数据
             console.warn('[initApp] 恢复绑定：Gist 数据不完整，保留本地数据');
           }
         }
 
-        setSyncStatus("synced", "✅ 已同步");
+        if (!hasSyncConflict) setSyncStatus("synced", "✅ 已同步");
         setupRealtimeListener();
         updateSyncCodeUI();
         // 已有云端数据时不再注入默认模板公司，避免重复添加
@@ -6671,6 +6704,7 @@ async function initApp() {
 
         const hasLocalData = localData && Object.keys(localData).length > 0;
         const hasGistData = gistData && Object.keys(gistData).length > 0;
+        let hasSyncConflict = false;
         console.log('[initApp] hasLocalData:', hasLocalData, ', hasGistData:', hasGistData);
 
         // 数据保护：如果 Gist 数据为空但有本地数据，不覆盖本地
@@ -6680,22 +6714,28 @@ async function initApp() {
           const hasProgressData = Object.keys(gistData).some(k => !k.startsWith('_') && gistData[k]?.positions?.length > 0);
           
           if (gistCompanies.length > 0 || hasProgressData) {
-            // Gist 数据有效，覆盖本地
-            saveStateToLocal(convertGistDataToLocal(gistData));
-            setSyncStatus("synced", "✅ 已从云端同步");
-            console.log('[initApp] Gist 数据有效，已同步到本地');
+            const remoteState = convertGistDataToLocal(gistData);
+            if (hasLocalData && JSON.stringify(remoteState) !== JSON.stringify(localData)) {
+              _pendingSyncData = gistData;
+              hasSyncConflict = true;
+              showSyncConflictModal();
+              console.warn('[initApp] 本地与云端数据不同，等待用户选择');
+            } else if (!hasLocalData) {
+              saveStateToLocal(remoteState);
+              setSyncStatus("synced", "✅ 已从云端同步");
+              console.log('[initApp] Gist 数据有效，已同步到本地');
+            }
           } else if (hasLocalData) {
-            // Gist 数据无效但本地有数据，保留本地并上传
-            console.warn('[initApp] Gist 数据不完整，保留本地数据并上传');
-            await syncToGist(localData);
-            setSyncStatus("synced", "✅ 云端数据已更新");
+            console.warn('[initApp] Gist 数据不完整，保留本地数据，等待手动同步');
+            pendingSync = true;
+            setSyncStatus("synced", "⚠️ 云端数据不完整，本地数据待上传");
           } else {
             setSyncStatus("synced", "✅ 同步码已绑定");
           }
         } else if (hasLocalData) {
-          // 上传本地数据到云端
-          await syncToGist(localData);
-          setSyncStatus("synced", "✅ 本地数据已上传到云端");
+          // Do not silently upload local data while binding a sync code.
+          pendingSync = true;
+          setSyncStatus("synced", "⚠️ 云端无数据，本地数据待上传");
         } else {
           setSyncStatus("synced", "✅ 同步码已绑定");
         }
