@@ -187,47 +187,6 @@
     background: #f0f0ec;
     color: var(--text-secondary);
   }
-  .direction-help-tip {
-    position: relative;
-    display: flex;
-    gap: 8px;
-    align-items: flex-start;
-    margin: -2px 4px 10px;
-    padding: 10px 34px 10px 12px;
-    border: 1px solid #cfe4c8;
-    border-radius: 9px;
-    background: #f0f8e8;
-    color: var(--text-secondary);
-    font-size: 0.78rem;
-    line-height: 1.55;
-  }
-  .direction-help-tip::before {
-    content: '';
-    position: absolute;
-    top: -6px;
-    left: 28px;
-    width: 10px;
-    height: 10px;
-    background: #f0f8e8;
-    border-top: 1px solid #cfe4c8;
-    border-left: 1px solid #cfe4c8;
-    transform: rotate(45deg);
-  }
-  .direction-help-tip strong { color: var(--text); }
-  .direction-help-tip-close {
-    position: absolute;
-    top: 5px;
-    right: 7px;
-    border: 0;
-    padding: 4px 6px;
-    background: transparent;
-    color: #8aa083;
-    font: inherit;
-    font-size: 1rem;
-    line-height: 1;
-    cursor: pointer;
-  }
-  .direction-help-tip-close:hover { color: var(--text); }
 
 /* Progress bar */
   .progress-wrap {
@@ -346,14 +305,6 @@
   .search-no-result-icon { font-size: 2.5rem; margin-bottom: 12px; opacity: 0.5; }
   .search-no-result-text { margin-bottom: 8px; }
   .search-no-result-hint { font-size: 0.8rem; color: #aaa; }
-
-  /* Read-only public company library */
-  .library-search-input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
-  .library-results { max-height: 52vh; overflow-y: auto; margin-top: 12px; display: grid; gap: 8px; }
-  .library-result { border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
-  .library-result-title { font-weight: 700; }
-  .library-result-meta { color: var(--text-secondary); font-size: 0.78rem; line-height: 1.55; margin-top: 4px; }
-  .library-result-actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
   
   /* Hide non-matching cards during search */
   .card.search-hidden { display: none !important; }
@@ -2568,14 +2519,41 @@
   <button class="settings-save-btn" onclick="saveSettingsApiKey()">保存</button>
 
   <div class="settings-profile-section">
-    <h4>🗂 数据整理</h4>
-    <button class="settings-profile-save" onclick="openCompanyCompareModal()">对比相似公司</button>
-    <button class="settings-profile-save" onclick="openClearUnsubmittedModal()" style="background:#9a6a1c;">移除未投递公司</button>
-    <button class="settings-profile-save" id="trashOpenBtn" onclick="openTrashModal()" style="background:#5b6670;">回收站</button>
-    <div class="settings-hint" id="recycleHelpTip" style="position:relative;background:#fff8e8;padding:9px 30px 9px 10px;border:1px solid #f1d79d;border-radius:8px;margin-top:10px;font-size:0.76rem;line-height:1.5;">
-      💡 移除的公司会先进入回收站，可随时恢复；只有在回收站中选择“永久删除”才不可恢复。
-      <button onclick="dismissRecycleHelpTip()" title="关闭提示" aria-label="关闭回收站提示" style="position:absolute;right:5px;top:4px;border:0;background:transparent;color:#9a7a42;font-size:1rem;cursor:pointer;">×</button>
+    <h4>🎯 求职方向</h4>
+    <div class="settings-hint" style="background:#f0f8e8;padding:8px 10px;border-radius:6px;margin-bottom:8px;font-size:0.8rem;line-height:1.5;">
+      💡 <strong>更新意向岗位/行业？</strong>在此修改即可。已有的公司数据<strong>不会被删除</strong>，会自动按新行业分组显示。AI 推荐和 AI 填写也会按新方向匹配。
     </div>
+    <label>目标岗位</label>
+    <input type="text" id="settingsPosition" placeholder="如：游戏发行、市场营销、品牌策划">
+    <div class="settings-hint">修改后 AI 助手的推荐和填写将自动匹配新岗位</div>
+    <label>目标行业</label>
+    <select id="settingsIndustry">
+      <option value="游戏">游戏</option>
+      <option value="互联网">互联网</option>
+      <option value="科技">科技</option>
+      <option value="AI">AI</option>
+      <option value="消费电子">消费电子</option>
+      <option value="硬件制造">硬件制造</option>
+      <option value="电商">电商</option>
+      <option value="汽车出行">汽车出行</option>
+      <option value="新能源">新能源</option>
+      <option value="机器人">机器人</option>
+      <option value="通信">通信</option>
+      <option value="外企">外企</option>
+      <option value="金融">金融</option>
+      <option value="教培">教培</option>
+      <option value="影像">影像</option>
+      <option value="央企国企">央企国企</option>
+      <option value="航天">航天</option>
+      <option value="医药">医药</option>
+      <option value="制造业">制造业</option>
+      <option value="消费品">消费品</option>
+      <option value="__custom__">️ 自定义行业...</option>
+      <option value="其他">不限行业</option>
+    </select>
+    <input type="text" id="settingsIndustryCustom" placeholder="输入自定义行业名称" style="display:none;">
+    <div class="settings-hint">切换行业后，原有公司数据保留不变，在新行业下方独立分区展示</div>
+    <button class="settings-profile-save" onclick="saveProfileSettings()">保存求职方向</button>
   </div>
 
 
@@ -2629,12 +2607,6 @@
     </span>
   </div>
   <span class="direction-edit-hint">修改</span>
-</div>
-
-<div class="direction-help-tip" id="directionHelpTip" style="display:none;">
-  <span>💡</span>
-  <span><strong>更新意向岗位/行业？</strong>点击上方“修改”即可。已有公司不会被删除，会按新行业分组显示；AI 推荐和自动填充也会按新方向匹配。</span>
-  <button class="direction-help-tip-close" onclick="dismissDirectionHelpTip()" title="关闭提示" aria-label="关闭求职方向提示">×</button>
 </div>
 
 <!-- Direction Inline Editor (hidden by default) -->
@@ -2697,7 +2669,6 @@
 <!-- Global Action Bar (shown when companies exist) -->
 <div class="global-action-bar" id="globalActionBar" style="display:none;">
   <button class="gab-add" onclick="openCompanyModal()">+ 添加公司</button>
-  <button class="gab-search" onclick="openCompanyLibrary()">📚 搜索公司库</button>
   <button class="gab-ai" onclick="aiRecommendDirect()">🤖 AI 推荐公司</button>
   <button class="gab-search" onclick="showSearchBar()" title="搜索公司（Ctrl+F）">🔍 搜索</button>
 </div>
@@ -2751,47 +2722,6 @@
   </div>
 </div>
 
-<div class="modal-overlay" id="companyCompareModal">
-  <div class="modal-box" style="max-width:540px;">
-    <div class="modal-title">对比相似公司</div>
-    <div class="modal-desc" id="companyCompareDesc"></div>
-    <div id="companyCompareList" style="max-height:48vh;overflow-y:auto;margin:12px 0;"></div>
-    <div class="modal-actions"><button class="modal-btn" onclick="closeCompanyCompareModal()">关闭</button></div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="companyMergeModal">
-  <div class="modal-box">
-    <div class="modal-title">保留前确认数据</div>
-    <div class="modal-desc" id="companyMergeDesc"></div>
-    <div class="modal-actions" style="flex-wrap:wrap;">
-      <button class="modal-btn" onclick="closeCompanyMergeModal()">返回</button>
-      <button class="modal-btn" onclick="resolveCompanyComparison(false)">不合并，移入回收站</button>
-      <button class="modal-btn modal-btn-primary" onclick="resolveCompanyComparison(true)">合并数据后移入回收站</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="clearUnsubmittedModal">
-  <div class="modal-box">
-    <div class="modal-title">移除未投递公司</div>
-    <div class="modal-desc" id="clearUnsubmittedDesc"></div>
-    <div class="modal-actions">
-      <button class="modal-btn" onclick="closeClearUnsubmittedModal()">取消</button>
-      <button class="modal-btn modal-btn-primary" id="clearUnsubmittedConfirm" onclick="confirmClearUnsubmitted()" style="background:#9a6a1c;border-color:#9a6a1c;">确认移入回收站</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="trashModal">
-  <div class="modal-box" style="max-width:540px;">
-    <div class="modal-title">回收站</div>
-    <div class="modal-desc" id="trashDesc"></div>
-    <div id="trashList" style="max-height:48vh;overflow-y:auto;margin:12px 0;"></div>
-    <div class="modal-actions"><button class="modal-btn" onclick="closeTrashModal()">关闭</button></div>
-  </div>
-</div>
-
 <script>
 // ===== Industry Classification Data =====
 var INDUSTRY_KEYWORDS = null;
@@ -2807,18 +2737,8 @@ function _initIndustryKeywords() {
 
 // ===== Gist Sync Configuration =====
 const GIST_ID = '8d3ff1e542daaf7d59b13d80b2912a44';
-const GIST_FILE = 'jobpulse_sync.json';
 const GIST_RAW_URL = 'https://gist.githubusercontent.com/molulinlin/' + GIST_ID + '/raw/jobpulse_sync.json';
 const GIST_API_URL = 'https://api.github.com/gists/' + GIST_ID;
-
-// Accept both the legacy raw-state file and the short-lived wrapped format.
-function getGistState(parsed) {
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  if (Object.prototype.hasOwnProperty.call(parsed, 'data')) {
-    return parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data) ? parsed.data : null;
-  }
-  return parsed;
-}
 
 // ===== App State =====
 let currentSyncCode = null;
@@ -2840,33 +2760,6 @@ const STATUSES = [
   "Offer",
   "淘汰"
 ];
-
-// Reusable career-priority model, adapted from the original game-industry ranking.
-const CAREER_PRIORITY_DIMENSIONS = [
-  { key: 'businessStrength', label: '业务基础与资源', weight: 15, criterion: '主营业务/核心产品或服务、营收或资金稳定性、资源与客户基础' },
-  { key: 'growthOutlook', label: '成长前景', weight: 15, criterion: '业务增长趋势、新业务管线、赛道前景与技术/市场布局' },
-  { key: 'brandPosition', label: '行业地位与品牌', weight: 14, criterion: '行业影响力、雇主品牌、该经历对后续求职的认可度' },
-  { key: 'compensation', label: '薪资竞争力', weight: 13, criterion: '校招薪资、奖金、股权及福利的综合竞争力' },
-  { key: 'roleStrength', label: '目标职能实力', weight: 11, criterion: '与用户目标岗位相关的团队实力、方法论、代表成果与岗位质量' },
-  { key: 'globalization', label: '国际化程度', weight: 10, criterion: '海外业务、全球客户或团队、跨区域发展机会' },
-  { key: 'developmentSystem', label: '培养与发展体系', weight: 8, criterion: '校招培养、导师机制、晋升路径和新人发展机会' },
-  { key: 'workLifeBalance', label: '工作强度与WLB', weight: 6, criterion: '工时、休假、加班文化及公开口碑' },
-  { key: 'applicationFriendliness', label: '投递友好度', weight: 4, criterion: '岗位/HC数量、对用户背景的接受度、流程和投递限制' },
-  { key: 'locationLife', label: '城市与生活质量', weight: 4, criterion: '办公城市、生活成本、通勤与人才政策' }
-];
-
-function calculateCareerPriority(assessment) {
-  const scores = assessment && assessment.scores;
-  if (!scores || typeof scores !== 'object') return null;
-  let total = 0;
-  for (const dimension of CAREER_PRIORITY_DIMENSIONS) {
-    const score = Number(scores[dimension.key]);
-    if (!Number.isFinite(score) || score < 0 || score > 10) return null;
-    total += score * dimension.weight / 10;
-  }
-  total = Math.round(total);
-  return { score: total, priority: total >= 70 ? 'high' : total >= 45 ? 'mid' : 'low' };
-}
 
 const INTERVIEW_STATUSES = ["笔试", "群面", "一面", "二面", "三面", "HR面"];
 
@@ -2952,8 +2845,8 @@ async function bindSyncCodeUI() {
       if (response.ok) {
         const gistContent = await response.text();
         const parsed = JSON.parse(gistContent);
-        gistData = getGistState(parsed);
-        if (gistData) {
+        if (parsed && parsed.data) {
+          gistData = parsed.data;
           console.log('[bindSyncCodeUI] Gist 有数据, keys:', Object.keys(gistData));
         } else { console.log('[bindSyncCodeUI] Gist 无数据'); }
       } else { console.log('[bindSyncCodeUI] Gist 无数据 (status: ' + response.status + ')'); }
@@ -3066,8 +2959,8 @@ async function pollRemoteSync() {
     if (!response.ok) return;
     const gistContent = await response.text();
     const parsed = JSON.parse(gistContent);
-    const remoteData = getGistState(parsed);
-    if (remoteData) {
+    if (parsed && parsed.data) {
+      const remoteData = parsed.data;
       const localData = loadStateFromLocal();
       const remoteJson = JSON.stringify(remoteData);
       const localJson = JSON.stringify(localData);
@@ -3082,7 +2975,7 @@ async function pollRemoteSync() {
         console.log('[pollSync] 数据一致，无需更新');
       }
     } else {
-      console.log('[pollSync] 远程文档不存在或格式无效');
+      console.log('[pollSync] 远程文档不存在或无 data 字段');
     }
   } catch (err) {
     console.warn("[pollSync] 拉取失败:", err);
@@ -3114,7 +3007,6 @@ function syncUseRemote() {
     const merged = new Set([...(converted._deleted_companies || []), ...localDeleted]);
     converted._deleted_companies = Array.from(merged);
   }
-  converted._trash_companies = mergeTrashEntries(converted._trash_companies, localData._trash_companies);
   saveStateToLocal(converted);
   if (!converted._defaults_initialized) initMomoDefaults();
   deduplicateCompanies();
@@ -3169,7 +3061,6 @@ function syncMergeData() {
   
   // Preserve _defaults_initialized
   localData._defaults_initialized = true;
-  localData._trash_companies = mergeTrashEntries(localData._trash_companies, remoteData._trash_companies);
   
   saveStateToLocal(localData);
   deduplicateCompanies();
@@ -3199,7 +3090,7 @@ async function updatePasswordStatus() {
 }
 
 // Apply remote data when user clicks refresh (fallback for manual sync)
-async function applyRemoteData() {
+function applyRemoteData() {
   console.log('[applyRemoteData] 用户手动触发同步');
   if (window._pendingRemoteData) {
     saveStateToLocal(convertGistDataToLocal(window._pendingRemoteData));
@@ -3220,10 +3111,7 @@ async function applyRemoteData() {
     // No pending data, fetch fresh from Gist
     const data = await loadFromGist();
     if (data) {
-      const localData = loadStateFromLocal();
-      const converted = convertGistDataToLocal(data);
-      converted._trash_companies = mergeTrashEntries(converted._trash_companies, localData._trash_companies);
-      saveStateToLocal(converted);
+      saveStateToLocal(convertGistDataToLocal(data));
       const savedState = loadStateFromLocal();
       if (!savedState._defaults_initialized) initMomoDefaults();
       setSyncStatus("synced", " 已从云端同步");
@@ -3720,6 +3608,7 @@ const DATA = [
 const MOMO_DEFAULTS = [
 
 
+
     {id:'momo_湖北农发集团',section:'农业/食品',company:'湖北农发集团',position:'工程建设类岗位，市场营销类岗位，智慧农业类岗位，生产技术类岗位，粮油食品类岗位，职能管理类岗位',location:'河北, 湖北',deadline:'2026-05-08',priority:'high',priLabel:'⭐⭐⭐',links:[{text:'http://campus.51job.com/hbnyfzjt2026/m/job.html',url:'http://campus.51job.com/hbnyfzjt2026/m/job.html'}],notice:'省属国企,五险一金足额缴纳,定期体检,餐补,带薪年假,10万-15万/年',note:'春招·[\'农业\']'},
     {id:'momo_Nova',section:'互联网/科技',company:'Nova',position:'Application Engineer，Field Service Engineer，Service Coordinator Intern',location:'上海, 东莞, 北京, 合肥, 江阴, 深圳',deadline:'招满即止',priority:'mid',priLabel:'⭐⭐',links:[{text:'https://campus.51job.com/nova2026',url:'https://campus.51job.com/nova2026'}],notice:'半导体量测领军外企, 流程无笔试, 核心技术岗, 18k-30k*14',note:'春招·[\'半导体\']'},
     {id:'momo_中国一拖',section:'制造业',company:'中国一拖',position:'工艺工程师，材料工程师，研发工程师，职能管理岗，国内销售经理，海外销售经理',location:'南京, 洛阳, 海外',deadline:'招满即止',priority:'high',priLabel:'⭐⭐⭐',links:[{text:'https://zgytjt.zhaopin.com',url:'https://zgytjt.zhaopin.com/'}],notice:'五险二金,一次性安家费,免费公寓,员工餐厅,洛阳/南京落户补贴,8k-15k*14',note:'春招·[\'制造业\']'},
@@ -3761,7 +3650,7 @@ const MOMO_DEFAULTS = [
     {id:'momo_煜谦 (RIVERKING)',section:'农业/食品',company:'煜谦 (RIVERKING)',position:'仓储管培生，商品管培生，批发储备销售管培生，渠道管理与运营管培生',location:'上海',deadline:'招满即止',priority:'low',priLabel:'⭐',links:[{text:'https://mp.weixin.qq.com/s/EqLQHOBUwAF0S8EXYogiCA',url:'https://mp.weixin.qq.com/s/EqLQHOBUwAF0S8EXYogiCA'}],notice:'提供员工宿舍,水果内购福利,一对一导师带教,8k~12k*13',note:'春招·[\'农业\', \'交通运输\']'},
     {id:'momo_字节跳动集团职能',section:'消费/零售',company:'字节跳动集团职能',position:'HRBP，招聘类，采购经营，集团内控，人才系统AI产品经理，国际现金管理，人力与管理策略类，企业文化沟通研究，企业服务策略中台，企业服务综合运营',location:'上海, 北京, 南京, 成都, 武汉, 深圳, 西安',deadline:'招满即止',priority:'low',priLabel:'⭐',links:[{text:'https://jobs.toutiao.com/campus/position?keywords=%E4%BA%BA%E5%8A%9B%E4%B8%8E%E7%AE%A1%E7%90%86\\x26amp;category=6704216386916321540%2C6704216480889702664%2C6850051245856524558%2C6704216727414114564\\x26amp;location=\\x26amp;project=7525009396952582407%2C7194661126919358757\\x26amp;type=\\x26amp;job_hot_flag=\\x26amp;current=1\\x26amp;limit=10\\x26amp;functionCategory=\\x26amp;tag=\\x26amp;spread=63RJW5M',url:'https://jobs.toutiao.com/campus/position?keywords=%E4%BA%BA%E5%8A%9B%E4%B8%8E%E7%AE%A1%E7%90%86\\x26amp;category=6704216386916321540%2C6704216480889702664%2C6850051245856524558%2C6704216727414114564\\x26amp;location=\\x26amp;project=7525009396952582407%2C7194661126919358757\\x26amp;type=\\x26amp;job_hot_flag=\\x26amp;current=1\\x26amp;limit=10\\x26amp;functionCategory=\\x26amp;tag=\\x26amp;spread=63RJW5M'}],notice:'六险一金,免费三餐,房补丰厚,20k-35k*15',note:'春招·[\'电商\']'},
     {id:'momo_Cytiva',section:'医疗/生物',company:'Cytiva',position:'生命科学业务实习生,流程优化家,工程协作家,活动策划家,AI开发家,AI行动家',location:'上海, 广州',deadline:'2026-05-15',priority:'mid',priLabel:'⭐⭐',links:[{text:'https://xyz.51job.com/consumer/pc/home/index?ctmid=9289406',url:'https://xyz.51job.com/consumer/pc/home/index?ctmid=9289406'}],notice:'含转正机会, 需2026年7-8月全职实习, 丹纳赫集团旗下生命科学巨头, 专属Mentor带教。',note:'暑期实习·[\'医药生物\']'},
-    {id:'momo_OPPO ',section:'互联网/科技',company:'OPPO ',position:'ID设计师,CMF设计师,UI视觉设计师,动效设计师,交互设计师,影像效果设计师,营销视觉设计师',location:'深圳市, 东莞市',deadline:'招满即止',priority:'low',priLabel:'⭐',links:[{text:'https://mp.weixin.qq.com/s/wGwgnSRp8YZareC16zq4ug',url:'https://mp.weixin.qq.com/s/wGwgnSRp8YZareC16zq4ug'}],notice:'针对2027届设计人才, 涵盖工业/UI/交互等7大核心岗, 表现优异可提前锁定校招OFFER.',note:'暑期实习·[\'互联网\']'},
+    {id:'momo_OPPO ',section:'互联网/科技',company:'OPPO ',position:'ID设计师,CMF设计师,UI视觉设计师,动效设计师,交互设计师,影像效果设计师,营销视觉设计师',location:'深圳市, 东莞市',deadline:'招满即止',priority:'low',priLabel:'⭐',links:[{text:'https://mp.weixin.qq.com/s/wGwgnSRp8YZareC16zq4ug',url:'https://mp.weixin.qq.com/s/wGwgnSRp8YZareC16zq4ug'}],notice:'针对2027届设计人才, 涵盖工业/UI/交互等7大核心岗, 表现优异可提前锁定校招OFFER. | 内推码: X1757111 | 微信: hhhyyy701',note:'暑期实习·[\'互联网\']'},
     {id:'momo_淘天集团T-Star顶尖人才',section:'互联网/科技',company:'淘天集团T-Star顶尖人才',position:'T-Star顶尖技术人才实习生',location:'全国',deadline:'招满即止',priority:'low',priLabel:'⭐',links:[{text:'https://talent.taotian.com/star/home',url:'https://talent.taotian.com/star/home'}],notice:'阿里星继承项目, 针对27届及以后顶尖技术人才, 聚焦AIGC/大模型等核心领域, 提供行业顶尖薪资回报。',note:'日常实习·[\'电商\', \'互联网\']'},
     {id:'momo_太和农商银行',section:'金融',company:'太和农商银行',position:'金融业务岗，金融科技岗',location:'太和',deadline:'2026-04-26',priority:'high',priLabel:'⭐⭐⭐',links:[{text:'https://arcuxy2026.zhaopin.com',url:'https://arcuxy2026.zhaopin.com/'}],notice:'有五险一金,节日福利,定期体检,最低服务年限5年,6k~10k*14',note:'春招·[\'金融\', \'银行\']'},
     {id:'momo_华勤技术',section:'制造业',company:'华勤技术',position:'制造类岗位',location:'上海',deadline:'招满即止',priority:'low',priLabel:'⭐',links:[{text:'https://jobs.huaqin.com/',url:'https://jobs.huaqin.com/'}],notice:'全球智能硬件ODM龙头，提供五险一金、餐补、班车及宿舍，薪资参考10k-18k*13-15',note:'春招·[\'制造业\']'},
@@ -3821,13 +3710,241 @@ const MOMO_DEFAULTS = [
     {id:'momo_海兴电力',section:'制造业',company:'海兴电力',position:'财务专员(利沃得)，制造管培生，质量管培生，工艺工程师(水表)，工艺工程师(利沃得)，质量工程师(利沃得)，国内销售管培生，控制算法工程师，泰语海外销售经理，印尼语海外销售经理，海外技术支持工程师，海外解决方案工程师',location:'全国, 宁波, 杭州, 深圳, 顺德',deadline:'招满即止',priority:'low',priLabel:'⭐',links:[{text:'https://job.hxgroup.com/',url:'https://job.hxgroup.com/'}],notice:'有五险一金, 各种补贴, 班车食堂, 13k~18k*14',note:'春招补录·[\'制造业\', \'新能源\']'},
     {id:'momo_致欧家居',section:'消费/零售',company:'致欧家居',position:'产品管培生，研发管培生，职能管培生，营销管培生，供应链管培生',location:'深圳, 郑州',deadline:'招满即止',priority:'low',priLabel:'⭐',links:[{text:'https://songmicshome.jobs.feishu.cn/index',url:'https://songmicshome.jobs.feishu.cn/index'}],notice:'有六险一金,餐饮补贴,节日福利,团建旅游,8k~15k*13',note:'春招·[\'电商\']'}
 ];
+const MOMO_SYNC_HASH = '3100486406b39efc3f3d3565bc97cc3b9e2d7b6e3427b194f4442ef4beb05b41';
+
 function initMomoDefaults() {
-  // Retired: the public company library is read-only and must never enter personal records.
+  if (currentSyncHash !== MOMO_SYNC_HASH) return;
+  
+  const state = loadState();
+  if (!state._custom_companies) state._custom_companies = [];
+  
+  // 如果已经初始化过默认公司，不再重复注入（防止每次刷新都加入模板公司）
+  if (state._defaults_initialized) return;
+  
+  const existingNames = new Set(state._custom_companies.map(c => (c.company||'').replace(/\s/g,'').toLowerCase()));
+  let added = 0;
+  let updated = 0;
+  
+  // ===== 迁移逻辑：网易游戏 → 网易互娱 + 网易雷火 =====
+  (function migrateNetease() {
+    var ne = state._custom_companies.find(function(c) {
+      return c.company === '网易游戏' || c.company === '网易';
+    });
+    if (!ne) return;
+    
+    // 找到网易互娱/雷火的模板数据
+    var huyuDef = MOMO_DEFAULTS.find(function(d) { return d.id === 'momo_网易互娱'; });
+    var leihuoDef = MOMO_DEFAULTS.find(function(d) { return d.id === 'momo_网易雷火'; });
+    if (!huyuDef || !leihuoDef) return;
+    
+    // 1. 将旧"网易游戏"改为"网易互娱"，继承原有进度
+    var huyu = {
+      id: 'momo_网易互娱', section: huyuDef.section, company: '网易互娱',
+      position: huyuDef.position, location: huyuDef.location, deadline: huyuDef.deadline,
+      priority: huyuDef.priority, priLabel: huyuDef.priLabel, links: huyuDef.links,
+      notice: huyuDef.notice, note: huyuDef.note
+    };
+    // 继承旧条目位置
+    var idx = state._custom_companies.indexOf(ne);
+    state._custom_companies.splice(idx, 1, huyu);
+    existingNames.delete((ne.company||'').replace(/\s/g,'').toLowerCase());
+    existingNames.add('网易互娱');
+    
+    // 继承旧条目的岗位进度到新id
+    var oldId = ne.id;
+    var oldProgress = state[oldId] ? JSON.parse(JSON.stringify(state[oldId])) : null;
+    var huyuPositions = [];
+    var leihuoPositions = [];
+    if (oldProgress && oldProgress.positions) {
+      oldProgress.positions.forEach(function(p) {
+        var name = p.name || '';
+        if (name.indexOf('雷火') >= 0) {
+          leihuoPositions.push(p);
+        } else {
+          // 含"互娱"、"网易"或无明确关键词的岗位 → 归网易互娱
+          huyuPositions.push(p);
+        }
+      });
+    }
+    if (oldId) delete state[oldId];
+    // 直接写入 state 进度（forEach 中 !state[def.id] 检查会跳过已存在的）
+    state['momo_网易互娱'] = { positions: huyuPositions, note: huyuDef.note };
+    updated++;
+    
+    // 2. 添加"网易雷火"为新条目
+    state._custom_companies.push({
+      id: 'momo_网易雷火', section: leihuoDef.section, company: '网易雷火',
+      position: leihuoDef.position, location: leihuoDef.location, deadline: leihuoDef.deadline,
+      priority: leihuoDef.priority, priLabel: leihuoDef.priLabel, links: leihuoDef.links,
+      notice: leihuoDef.notice, note: leihuoDef.note
+    });
+    existingNames.add('网易雷火');
+    state['momo_网易雷火'] = { positions: leihuoPositions, note: leihuoDef.note };
+    added++;
+    
+    console.log('[momoDefaults] migrated 网易游戏 → 网易互娱 + 网易雷火');
+  })();
+  
+  // 用户主动删除的公司，不再自动补回
+  var deletedNames = state._deleted_companies || [];
+
+  MOMO_DEFAULTS.forEach(function(def) {
+    var normalized = (def.company||'').replace(/\s/g,'').toLowerCase();
+    // 如果用户在黑名单里（主动删除过），跳过不补回
+    if (deletedNames.indexOf(normalized) !== -1 || deletedNames.indexOf(def.id) !== -1) {
+      return;
+    }
+    if (existingNames.has(normalized)) {
+      // Update metadata (notice/note/priority/position/deadline) for existing momo companies
+      var existing = state._custom_companies.find(function(c) {
+        return (c.company||'').replace(/\s/g,'').toLowerCase() === normalized;
+      });
+      if (existing) {
+        // Update metadata for ALL matching companies (momo_ or user-added)
+        // Never overwrite user's progress data (positions/status/timeline)
+        existing.notice = def.notice;
+        existing.note = def.note;
+        existing.priority = def.priority;
+        existing.priLabel = def.priLabel;
+        existing.position = def.position;
+        existing.deadline = def.deadline;
+        // Only update links if currently empty or missing
+        if (!existing.links || existing.links.length === 0) {
+          existing.links = def.links;
+        }
+        updated++;
+      }
+      return;
+    }
+    existingNames.add(normalized);
+    state._custom_companies.push({
+      id: def.id, section: def.section, company: def.company,
+      position: def.position, location: def.location, deadline: def.deadline,
+      priority: def.priority, priLabel: def.priLabel, links: def.links,
+      notice: def.notice, note: def.note
+    });
+    if (!state[def.id]) state[def.id] = { positions: [], note: def.note };
+    added++;
+  });
+  
+  if (added > 0 || updated > 0) {
+    state._defaults_initialized = true;
+    saveState(state);
+    console.log('[momoDefaults] injected ' + added + ' new, updated metadata for ' + updated + ' existing');
+  }
 }
 
-// ===== 去重逻辑：保留兼容调用，重复项由用户在“对比相似公司”中处理 =====
+// ===== 去重逻辑：清理重复公司卡片（安全合并版） =====
 function deduplicateCompanies() {
-  // Intentionally blank: automatic merging could lose a user's distinct business-unit records.
+  const state = loadState();
+  if (!state._custom_companies || state._custom_companies.length === 0) return;
+  
+  const PRI_ORDER = { "high": 0, "mid": 1, "low": 2 };
+  const seen = new Map(); // normalized name -> { index, company }
+  const toRemove = []; // indices to remove
+  const mergeLog = []; // 记录合并操作
+  
+  state._custom_companies.forEach((c, idx) => {
+    const normalized = (c.company || '').replace(/\s/g, '').toLowerCase();
+    
+    if (seen.has(normalized)) {
+      // Duplicate found - decide which to keep
+      const existing = seen.get(normalized);
+      
+      // 实时读取两个项的进度数据
+      const existingState = state[existing.company.id] || { positions: [], note: '' };
+      const currentState = state[c.id] || { positions: [], note: '' };
+      const existingPosCount = (existingState.positions || []).length;
+      const currentPosCount = (currentState.positions || []).length;
+      
+      // Prefer: 1) momo_ ID, 2) more progress data, 3) higher priority, 4) earlier index
+      let keepExisting = true;
+      if (c.id.startsWith('momo_') && !existing.company.id.startsWith('momo_')) {
+        keepExisting = false; // Prefer momo_ ID
+      } else if (currentPosCount > existingPosCount) {
+        keepExisting = false; // Prefer more progress
+      } else if (currentPosCount === existingPosCount) {
+        const priA = PRI_ORDER[c.priority] ?? 1;
+        const priB = PRI_ORDER[existing.company.priority] ?? 1;
+        if (priA < priB) {
+          keepExisting = false; // Prefer higher priority (high=0 < mid=1 < low=2)
+        }
+      }
+      
+      if (keepExisting) {
+        // Merge current into existing
+        const targetId = existing.company.id;
+        const sourceId = c.id;
+        const targetState = state[targetId] || { positions: [], note: '' };
+        const sourceState = state[sourceId] || { positions: [], note: '' };
+        
+        // Merge positions (by name)
+        const targetPosNames = new Set((targetState.positions || []).map(p => p.name));
+        (sourceState.positions || []).forEach(p => {
+          if (!targetPosNames.has(p.name)) {
+            targetState.positions = targetState.positions || [];
+            targetState.positions.push(p);
+            mergeLog.push(`  岗位 "${p.name}" (${p.status}) 从 ${sourceId} 合并到 ${targetId}`);
+          }
+        });
+        
+        // Merge note (append if different)
+        if (sourceState.note && sourceState.note !== targetState.note) {
+          targetState.note = targetState.note ? targetState.note + '\n[合并] ' + sourceState.note : sourceState.note;
+          mergeLog.push(`  备注从 ${sourceId} 合并到 ${targetId}`);
+        }
+        
+        state[targetId] = targetState;
+        toRemove.push(idx);
+        console.log('[dedup] 合并并移除重复项:', c.company, '(', sourceId, '→', targetId, ')');
+      } else {
+        // Merge existing into current
+        const targetId = c.id;
+        const sourceId = existing.company.id;
+        const targetState = state[targetId] || { positions: [], note: '' };
+        const sourceState = state[sourceId] || { positions: [], note: '' };
+        
+        // Merge positions (by name)
+        const targetPosNames = new Set((targetState.positions || []).map(p => p.name));
+        (sourceState.positions || []).forEach(p => {
+          if (!targetPosNames.has(p.name)) {
+            targetState.positions = targetState.positions || [];
+            targetState.positions.push(p);
+            mergeLog.push(`  岗位 "${p.name}" (${p.status}) 从 ${sourceId} 合并到 ${targetId}`);
+          }
+        });
+        
+        // Merge note (append if different)
+        if (sourceState.note && sourceState.note !== targetState.note) {
+          targetState.note = targetState.note ? targetState.note + '\n[合并] ' + sourceState.note : sourceState.note;
+          mergeLog.push(`  备注从 ${sourceId} 合并到 ${targetId}`);
+        }
+        
+        state[targetId] = targetState;
+        toRemove.push(existing.index);
+        seen.set(normalized, { index: idx, company: c });
+        console.log('[dedup] 合并并移除重复项:', existing.company.company, '(', sourceId, '→', targetId, ')');
+      }
+    } else {
+      seen.set(normalized, { index: idx, company: c });
+    }
+  });
+  
+  if (toRemove.length > 0) {
+    if (mergeLog.length > 0) {
+      console.log('[dedup] 合并详情:\n' + mergeLog.join('\n'));
+    }
+    // Remove duplicates (sort indices descending to avoid shifting)
+    toRemove.sort((a, b) => b - a);
+    toRemove.forEach(idx => {
+      const removed = state._custom_companies.splice(idx, 1)[0];
+      delete state[removed.id]; // Clean up removed item's progress data
+    });
+    saveState(state);
+    console.log('[dedup] ✅ 去重完成，移除', toRemove.length, '个重复项');
+  } else {
+    console.log('[dedup] 未发现重复项');
+  }
 }
 
 const STORAGE_KEY = "job_checklist_v3";
@@ -3938,32 +4055,17 @@ async function syncToGist(state) {
     return;
   }
   try {
-    let gistToken = localStorage.getItem('gist_token');
-    if (!gistToken) {
-      gistToken = await showPasswordPrompt({
-        title: '启用云端同步',
-        desc: '请输入 GitHub 同步令牌。它只保存在当前浏览器，用于把你的数据写回自己的同步文件。',
-        placeholder: 'GitHub token',
-        isPassword: true
-      });
-      if (gistToken) localStorage.setItem('gist_token', gistToken);
-    }
-    if (!gistToken) {
-      pendingSync = true;
-      setSyncStatus('error', '⚠️ 未设置同步令牌，数据已保存在本地');
-      return;
-    }
     setSyncStatus("syncing", " 同步中...");
     _isLocalWrite = true;
     console.log('[syncToGist] 开始写入 Gist');
     const patchData = {};
     patchData[GIST_FILE] = {
-      content: JSON.stringify(state)
+      content: JSON.stringify({ data: state, updatedAt: new Date().toISOString() })
     };
     const response = await fetch(GIST_API_URL, {
       method: 'PATCH',
       headers: {
-        'Authorization': 'token ' + gistToken,
+        'Authorization': 'token ' + GIST_TOKEN,
         'Content-Type': 'application/json',
         'Accept': 'application/vnd.github.v3+json'
       },
@@ -3998,7 +4100,7 @@ async function loadFromGist() {
     }
     const gistContent = await response.text();
     const parsed = JSON.parse(gistContent);
-    const data = getGistState(parsed);
+    const data = parsed.data || null;
     console.log('[loadFromGist] ✅ 读取成功, keys:', data ? Object.keys(data) : 'null');
     return data;
   } catch (err) {
@@ -5073,472 +5175,6 @@ function findFeishuUrl(companyName) {
   return null;
 }
 
-// ===== Read-only company library =====
-let companyLibrary = [];
-let companyLibraryLoading = null;
-
-function normalizeCompanyName(name) {
-  return String(name || '').replace(/\s/g, '').toLowerCase();
-}
-
-// ===== Personal-company recycle bin and manual duplicate review =====
-const RECYCLE_HELP_TIP_KEY = 'jobpulse_recycle_help_tip_closed';
-let _pendingCompanyComparison = null;
-let _unsubmittedCandidateIds = [];
-
-function cloneCompanyData(value) {
-  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
-}
-
-function getTrashEntries(state) {
-  if (!Array.isArray(state._trash_companies)) state._trash_companies = [];
-  return state._trash_companies;
-}
-
-function mergeTrashEntries(first, second) {
-  const entries = [];
-  const ids = new Set();
-  (Array.isArray(first) ? first : []).concat(Array.isArray(second) ? second : []).forEach(function(entry) {
-    if (!entry || !entry.id || ids.has(entry.id)) return;
-    ids.add(entry.id);
-    entries.push(entry);
-  });
-  return entries;
-}
-
-function addDeletedCompanyMarker(state, company) {
-  if (!Array.isArray(state._deleted_companies)) state._deleted_companies = [];
-  [company.id, normalizeCompanyName(company.company)].forEach(function(marker) {
-    if (marker && !state._deleted_companies.includes(marker)) state._deleted_companies.push(marker);
-  });
-}
-
-function removeDeletedCompanyMarker(state, company) {
-  if (!Array.isArray(state._deleted_companies)) return;
-  const markers = new Set([company.id, normalizeCompanyName(company.company)]);
-  state._deleted_companies = state._deleted_companies.filter(function(marker) { return !markers.has(marker); });
-}
-
-function moveCompanyToTrash(state, companyId, reason) {
-  const companies = Array.isArray(state._custom_companies) ? state._custom_companies : [];
-  const index = companies.findIndex(function(company) { return company && company.id === companyId; });
-  if (index === -1) return false;
-  const company = companies[index];
-  getTrashEntries(state).push({
-    id: 'trash_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-    companyData: cloneCompanyData(company),
-    stateData: cloneCompanyData(state[companyId] || { positions: [], note: '' }),
-    deletedAt: Date.now(),
-    reason: reason || '手动移除'
-  });
-  companies.splice(index, 1);
-  delete state[companyId];
-  addDeletedCompanyMarker(state, company);
-  return true;
-}
-
-function hasPersonalCompanyData(record) {
-  if (!record || typeof record !== 'object') return false;
-  if (String(record.note || '').trim()) return true;
-  return Array.isArray(record.positions) && record.positions.some(function(position) {
-    return position && (String(position.name || '').trim() || position.status !== '未投递' || (Array.isArray(position.timeline) && position.timeline.length));
-  });
-}
-
-function isNeverAppliedCompany(state, company) {
-  const record = state[company.id];
-  const positions = record && Array.isArray(record.positions) ? record.positions : [];
-  return !positions.length || positions.every(function(position) {
-    return position && position.status === '未投递' && (!Array.isArray(position.timeline) || position.timeline.length === 0);
-  });
-}
-
-function normalizedCompanyForCompare(name) {
-  return normalizeCompanyName(name).replace(/[（）()【】\[\]《》“”"'·—_\-]/g, '');
-}
-
-function commonPrefixLength(first, second) {
-  let index = 0;
-  while (index < first.length && index < second.length && first[index] === second[index]) index++;
-  return index;
-}
-
-function longestCommonSubstringLength(first, second) {
-  let longest = 0;
-  for (let i = 0; i < first.length; i++) {
-    for (let j = 0; j < second.length; j++) {
-      let length = 0;
-      while (first[i + length] && first[i + length] === second[j + length]) length++;
-      if (length > longest) longest = length;
-    }
-  }
-  return longest;
-}
-
-function findSimilarCompanyPairs(companies) {
-  const pairs = [];
-  for (let left = 0; left < companies.length; left++) {
-    const first = normalizedCompanyForCompare(companies[left].company);
-    if (first.length < 2) continue;
-    for (let right = left + 1; right < companies.length; right++) {
-      const second = normalizedCompanyForCompare(companies[right].company);
-      let score = 0;
-      let reason = '';
-      if (first === second) { score = 100; reason = '名称规范化后相同'; }
-      else if (first.includes(second) || second.includes(first)) { score = 90; reason = '名称包含'; }
-      else if (commonPrefixLength(first, second) >= 2) { score = 70; reason = '共同前缀'; }
-      else if (longestCommonSubstringLength(first, second) >= 3) { score = 75; reason = '名称高度相近'; }
-      if (score) pairs.push({ leftId: companies[left].id, rightId: companies[right].id, score: score, reason: reason });
-    }
-  }
-  return pairs;
-}
-
-function makeCompareButton(label, handler) {
-  const button = document.createElement('button');
-  button.className = 'modal-btn';
-  button.type = 'button';
-  button.textContent = label;
-  button.addEventListener('click', handler);
-  return button;
-}
-
-function openCompanyCompareModal() {
-  const modal = document.getElementById('companyCompareModal');
-  const desc = document.getElementById('companyCompareDesc');
-  const list = document.getElementById('companyCompareList');
-  const state = loadState();
-  const companies = Array.isArray(state._custom_companies) ? state._custom_companies : [];
-  const pairs = findSimilarCompanyPairs(companies);
-  list.replaceChildren();
-  desc.textContent = pairs.length
-    ? '发现 ' + pairs.length + ' 组可能相似的公司。名称相似不一定重复，请由你决定是否合并；本工具不会自动修改任何卡片。'
-    : '未发现需要人工确认的相似公司。';
-  pairs.forEach(function(pair) {
-    const first = companies.find(function(company) { return company.id === pair.leftId; });
-    const second = companies.find(function(company) { return company.id === pair.rightId; });
-    if (!first || !second) return;
-    const item = document.createElement('div');
-    item.style.cssText = 'border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin:8px 0;';
-    const title = document.createElement('div');
-    title.style.cssText = 'font-weight:600;line-height:1.6;';
-    title.textContent = first.company + '  ↔  ' + second.company;
-    const detail = document.createElement('div');
-    detail.style.cssText = 'font-size:.78rem;color:#6b7280;margin:3px 0 8px;';
-    detail.textContent = '可能相似：' + pair.reason + '。' + (hasPersonalCompanyData(state[first.id]) ? '前者含填写数据。' : '前者暂无填写数据。') + (hasPersonalCompanyData(state[second.id]) ? '后者含填写数据。' : '后者暂无填写数据。');
-    const actions = document.createElement('div');
-    actions.style.cssText = 'display:flex;gap:7px;flex-wrap:wrap;';
-    actions.append(makeCompareButton('保留「' + first.company + '」', function() { chooseCompanyComparison(first.id, second.id); }));
-    actions.append(makeCompareButton('保留「' + second.company + '」', function() { chooseCompanyComparison(second.id, first.id); }));
-    item.append(title, detail, actions);
-    list.append(item);
-  });
-  modal.classList.add('active');
-}
-
-function closeCompanyCompareModal() {
-  document.getElementById('companyCompareModal').classList.remove('active');
-}
-
-function chooseCompanyComparison(keepId, removeId) {
-  const state = loadState();
-  const keep = (state._custom_companies || []).find(function(company) { return company.id === keepId; });
-  const remove = (state._custom_companies || []).find(function(company) { return company.id === removeId; });
-  if (!keep || !remove) { showToast('卡片已发生变化，请重新打开对比'); openCompanyCompareModal(); return; }
-  _pendingCompanyComparison = { keepId: keepId, removeId: removeId };
-  if (!hasPersonalCompanyData(state[removeId])) { resolveCompanyComparison(false); return; }
-  document.getElementById('companyMergeDesc').textContent = '「' + remove.company + '」含有岗位、流程或备注。是否将这些填写数据合并到「' + keep.company + '」？无论选择哪种方式，被移出的卡片都会进入回收站，可恢复。';
-  document.getElementById('companyMergeModal').classList.add('active');
-}
-
-function closeCompanyMergeModal() {
-  document.getElementById('companyMergeModal').classList.remove('active');
-  _pendingCompanyComparison = null;
-}
-
-function resolveCompanyComparison(mergeData) {
-  if (!_pendingCompanyComparison) return;
-  const comparison = _pendingCompanyComparison;
-  const state = loadState();
-  const keep = (state._custom_companies || []).find(function(company) { return company.id === comparison.keepId; });
-  const remove = (state._custom_companies || []).find(function(company) { return company.id === comparison.removeId; });
-  if (!keep || !remove) { closeCompanyMergeModal(); openCompanyCompareModal(); return; }
-  if (mergeData) {
-    const target = state[keep.id] || { positions: [], note: '' };
-    const source = state[remove.id] || { positions: [], note: '' };
-    target.positions = Array.isArray(target.positions) ? target.positions : [];
-    (Array.isArray(source.positions) ? source.positions : []).forEach(function(position) {
-      const copy = cloneCompanyData(position);
-      if (!target.positions.some(function(existing) { return JSON.stringify(existing) === JSON.stringify(copy); })) target.positions.push(copy);
-    });
-    if (String(source.note || '').trim() && source.note !== target.note) {
-      target.note = String(target.note || '').trim() ? target.note + '\n--- 合并记录 ---\n' + source.note : source.note;
-    }
-    state[keep.id] = target;
-  }
-  moveCompanyToTrash(state, remove.id, mergeData ? '相似公司合并' : '相似公司对比');
-  saveState(state);
-  render();
-  closeCompanyMergeModal();
-  openCompanyCompareModal();
-  showToast(mergeData ? '已合并填写数据，原卡片已移入回收站' : '原卡片已移入回收站');
-}
-
-function openClearUnsubmittedModal() {
-  const state = loadState();
-  _unsubmittedCandidateIds = (state._custom_companies || []).filter(function(company) { return isNeverAppliedCompany(state, company); }).map(function(company) { return company.id; });
-  const desc = document.getElementById('clearUnsubmittedDesc');
-  const button = document.getElementById('clearUnsubmittedConfirm');
-  desc.textContent = _unsubmittedCandidateIds.length
-    ? '将把 ' + _unsubmittedCandidateIds.length + ' 张尚未投递的公司卡片移入回收站。含任何投递状态或流程时间线的卡片不会被移动；移入后可恢复，不会永久删除。'
-    : '没有符合条件的未投递公司。含任何投递状态或流程时间线的卡片都会保留。';
-  button.hidden = !_unsubmittedCandidateIds.length;
-  document.getElementById('clearUnsubmittedModal').classList.add('active');
-}
-
-function closeClearUnsubmittedModal() {
-  document.getElementById('clearUnsubmittedModal').classList.remove('active');
-  _unsubmittedCandidateIds = [];
-}
-
-function confirmClearUnsubmitted() {
-  const state = loadState();
-  let moved = 0;
-  _unsubmittedCandidateIds.forEach(function(id) {
-    const company = (state._custom_companies || []).find(function(item) { return item.id === id; });
-    if (company && isNeverAppliedCompany(state, company) && moveCompanyToTrash(state, id, '未投递清理')) moved++;
-  });
-  if (moved) { saveState(state); render(); showToast('已将 ' + moved + ' 张卡片移入回收站'); }
-  closeClearUnsubmittedModal();
-}
-
-function dismissRecycleHelpTip() {
-  localStorage.setItem(RECYCLE_HELP_TIP_KEY, '1');
-  const tip = document.getElementById('recycleHelpTip');
-  if (tip) tip.hidden = true;
-}
-
-function updateRecycleHelpTip() {
-  const tip = document.getElementById('recycleHelpTip');
-  if (tip) tip.hidden = localStorage.getItem(RECYCLE_HELP_TIP_KEY) === '1';
-}
-
-function openTrashModal() {
-  const state = loadState();
-  const entries = getTrashEntries(state);
-  const desc = document.getElementById('trashDesc');
-  const list = document.getElementById('trashList');
-  list.replaceChildren();
-  desc.textContent = entries.length ? '共有 ' + entries.length + ' 张已移除的卡片。恢复不会覆盖当前同名公司；永久删除后不可恢复。' : '回收站为空。';
-  entries.slice().reverse().forEach(function(entry) {
-    const item = document.createElement('div');
-    item.style.cssText = 'border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin:8px 0;';
-    const title = document.createElement('div');
-    title.style.fontWeight = '600';
-    title.textContent = (entry.companyData && entry.companyData.company) || '未命名公司';
-    const detail = document.createElement('div');
-    detail.style.cssText = 'font-size:.78rem;color:#6b7280;margin:3px 0 8px;';
-    detail.textContent = (entry.reason || '手动移除') + ' · ' + (entry.deletedAt ? formatDate(entry.deletedAt) : '时间未知') + (hasPersonalCompanyData(entry.stateData) ? ' · 含填写数据' : '');
-    const actions = document.createElement('div');
-    actions.style.cssText = 'display:flex;gap:7px;flex-wrap:wrap;';
-    actions.append(makeCompareButton('恢复', function() { restoreTrashEntry(entry.id); }));
-    actions.append(makeCompareButton('永久删除', function() { permanentlyDeleteTrashEntry(entry.id); }));
-    item.append(title, detail, actions);
-    list.append(item);
-  });
-  document.getElementById('trashModal').classList.add('active');
-}
-
-function closeTrashModal() {
-  document.getElementById('trashModal').classList.remove('active');
-}
-
-function restoreTrashEntry(trashId) {
-  const state = loadState();
-  const entries = getTrashEntries(state);
-  const index = entries.findIndex(function(entry) { return entry.id === trashId; });
-  const entry = entries[index];
-  if (!entry || !entry.companyData) return;
-  const normalized = normalizeCompanyName(entry.companyData.company);
-  if ((state._custom_companies || []).some(function(company) { return normalizeCompanyName(company.company) === normalized; })) {
-    alert('当前列表已有同名公司。请先在“对比相似公司”中处理，避免恢复出重复卡片。');
-    return;
-  }
-  if (!Array.isArray(state._custom_companies)) state._custom_companies = [];
-  state._custom_companies.push(cloneCompanyData(entry.companyData));
-  state[entry.companyData.id] = cloneCompanyData(entry.stateData || { positions: [], note: '' });
-  removeDeletedCompanyMarker(state, entry.companyData);
-  entries.splice(index, 1);
-  saveState(state);
-  render();
-  openTrashModal();
-  showToast('已恢复公司卡片');
-}
-
-function permanentlyDeleteTrashEntry(trashId) {
-  if (!confirm('确定永久删除这张回收站卡片吗？此操作不可恢复。')) return;
-  const state = loadState();
-  const entries = getTrashEntries(state);
-  const index = entries.findIndex(function(entry) { return entry.id === trashId; });
-  if (index === -1) return;
-  entries.splice(index, 1);
-  saveState(state);
-  openTrashModal();
-  showToast('已永久删除回收站卡片');
-}
-
-function normalizeLibraryLinks(links) {
-  return (Array.isArray(links) ? links : []).filter(function(link) {
-    return link && /^https?:\/\//i.test(link.url || '');
-  }).map(function(link) {
-    return { text: String(link.text || '投递入口'), url: String(link.url) };
-  });
-}
-
-function addLibraryEntry(entries, knownNames, entry) {
-  if (!entry || !entry.company) return;
-  const key = normalizeCompanyName(entry.company);
-  const links = normalizeLibraryLinks(entry.links);
-  const existing = knownNames.get(key);
-  if (existing) {
-    if (!existing.links.length && links.length) existing.links = links;
-    if (!existing.position && entry.position) existing.position = entry.position;
-    if (!existing.location && entry.location) existing.location = entry.location;
-    if (!existing.notice && entry.notice) existing.notice = entry.notice;
-    return;
-  }
-  const item = {
-    id: String(entry.id || 'library_' + key),
-    company: String(entry.company), section: String(entry.section || '其他'),
-    position: String(entry.position || ''), location: String(entry.location || ''),
-    deadline: String(entry.deadline || ''), priority: entry.priority || 'mid',
-    priLabel: entry.priLabel || '⭐⭐', links: links,
-    notice: String(entry.notice || ''), note: String(entry.note || '')
-  };
-  entries.push(item);
-  knownNames.set(key, item);
-}
-
-async function loadCompanyLibrary() {
-  if (companyLibrary.length) return companyLibrary;
-  if (companyLibraryLoading) return companyLibraryLoading;
-  companyLibraryLoading = fetch('./company_database.json', { cache: 'no-cache' })
-    .then(function(response) {
-      if (!response.ok) throw new Error('公司资料库加载失败 (' + response.status + ')');
-      return response.json();
-    })
-    .then(function(data) {
-      const entries = [];
-      const knownNames = new Map();
-      (data.companies || []).forEach(function(item) { addLibraryEntry(entries, knownNames, item); });
-      (typeof MOMO_DEFAULTS === 'undefined' ? [] : MOMO_DEFAULTS).forEach(function(item) { addLibraryEntry(entries, knownNames, item); });
-      (typeof REFERRAL_DB === 'undefined' ? [] : REFERRAL_DB).forEach(function(row) {
-        addLibraryEntry(entries, knownNames, {
-          id: 'referral_' + normalizeCompanyName(row[0]), company: row[0], section: String(row[2] || '其他').split('|')[0],
-          position: row[9], location: row[8], deadline: row[5], links: row[4] ? [{ text: '内推/投递入口', url: row[4] }] : [],
-          notice: row[6], note: row[3]
-        });
-      });
-      companyLibrary = entries;
-      console.log('[companyLibrary] 已加载 ' + entries.length + ' 条只读资料');
-      return entries;
-    })
-    .catch(function(error) {
-      companyLibraryLoading = null;
-      throw error;
-    });
-  return companyLibraryLoading;
-}
-
-function openCompanyLibrary() {
-  const modal = document.getElementById('companyLibraryModal');
-  const input = document.getElementById('companyLibraryInput');
-  const results = document.getElementById('companyLibraryResults');
-  if (!modal || !input || !results) return;
-  modal.classList.add('active');
-  input.value = '';
-  results.textContent = '正在加载公司资料库…';
-  loadCompanyLibrary().then(function() {
-    results.textContent = '已加载 ' + companyLibrary.length + ' 条资料。输入关键词开始搜索。';
-    input.focus();
-  }).catch(function(error) {
-    results.textContent = error.message + '，请稍后重试。';
-  });
-}
-
-function closeCompanyLibrary() {
-  document.getElementById('companyLibraryModal')?.classList.remove('active');
-}
-
-function renderCompanyLibraryResults() {
-  const input = document.getElementById('companyLibraryInput');
-  const results = document.getElementById('companyLibraryResults');
-  if (!input || !results || !companyLibrary.length) return;
-  const query = normalizeCompanyName(input.value);
-  if (!query) {
-    results.textContent = '已加载 ' + companyLibrary.length + ' 条资料。输入关键词开始搜索。';
-    return;
-  }
-  const matches = companyLibrary.filter(function(item) {
-    return [item.company, item.section, item.position, item.location, item.deadline, item.notice, item.note]
-      .some(function(value) { return normalizeCompanyName(value).includes(query); });
-  }).slice(0, 50);
-  results.innerHTML = '';
-  if (!matches.length) {
-    results.textContent = '没有找到匹配的公司或岗位。';
-    return;
-  }
-  matches.forEach(function(item) {
-    const card = document.createElement('div');
-    card.className = 'library-result';
-    const title = document.createElement('div');
-    title.className = 'library-result-title';
-    title.textContent = item.company;
-    const meta = document.createElement('div');
-    meta.className = 'library-result-meta';
-    meta.textContent = [item.section, item.position, item.location, item.deadline].filter(Boolean).join(' · ');
-    const actions = document.createElement('div');
-    actions.className = 'library-result-actions';
-    const addButton = document.createElement('button');
-    addButton.className = 'modal-btn modal-btn-primary';
-    addButton.textContent = '加入我的投递';
-    addButton.addEventListener('click', function() { addCompanyFromLibrary(item.id); });
-    actions.appendChild(addButton);
-    if (item.links[0]) {
-      const link = document.createElement('a');
-      link.href = item.links[0].url;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.textContent = item.links[0].text || '打开投递入口';
-      actions.appendChild(link);
-    }
-    card.append(title, meta, actions);
-    results.appendChild(card);
-  });
-}
-
-function addCompanyFromLibrary(id) {
-  const item = companyLibrary.find(function(entry) { return entry.id === id; });
-  if (!item) return;
-  const state = loadState();
-  if (!Array.isArray(state._custom_companies)) state._custom_companies = [];
-  const existing = state._custom_companies.find(function(entry) {
-    return normalizeCompanyName(entry.company) === normalizeCompanyName(item.company);
-  });
-  if (existing) {
-    closeCompanyLibrary();
-    render();
-    setTimeout(function() { scrollToCard(existing.id, true); }, 50);
-    return;
-  }
-  const copy = JSON.parse(JSON.stringify(item));
-  state._custom_companies.push(copy);
-  saveState(state);
-  closeCompanyLibrary();
-  render();
-  setTimeout(function() { scrollToCard(copy.id, true); }, 50);
-}
-
 // ===== AI Fill Company =====
 async function aiFillCompany() {
   const companyInput = document.getElementById("cmAiCompany");
@@ -5566,13 +5202,7 @@ async function aiFillCompany() {
       userTargetPosition = (profile.position || '').replace(/\s/g, '');
     } catch(e) {}
 
-    const systemPrompt = '你是一个求职助手。请根据用户提供的公司名称返回JSON格式的信息。只返回JSON，不要其他内容。公司评价只能依据公开可验证信息；信息不足时请给中性分5，不得编造。';
-    const priorityScoreShape = CAREER_PRIORITY_DIMENSIONS.map(function(dimension) {
-      return '    "' + dimension.key + '": 0';
-    }).join(',\n');
-    const priorityCriteria = CAREER_PRIORITY_DIMENSIONS.map(function(dimension) {
-      return '- ' + dimension.key + '（' + dimension.label + '，权重' + dimension.weight + '%）：' + dimension.criterion;
-    }).join('\n');
+    const systemPrompt = '你是一个求职助手。请根据用户提供的公司名称返回JSON格式的信息。只返回JSON，不要其他内容。';
     let userPrompt = '请为"' + company + '"公司提供以下信息，返回JSON格式：\n' +
       '{\n' +
       '  "website": "校招/招聘官网链接（必须是该公司校园招聘或招聘专区的URL，不是公司主页）",\n' +
@@ -5581,13 +5211,8 @@ async function aiFillCompany() {
       '  "positions": ["推荐岗位1", "推荐岗位2", "推荐岗位3"],\n' +
       '  "location": "工作城市/地点（如：北京、上海、远程）",\n' +
       '  "deadline": "投递截止日期（如：2026-10-31 或 招满即止）",\n' +
-      '  "notice": "投递注意事项（1-2条，用分号分隔）",\n' +
-      '  "priorityAssessment": {\n' +
-      '    "scores": {\n' + priorityScoreShape + '\n    },\n' +
-      '    "summary": "不超过40字的评分依据"\n' +
-      '  }\n' +
-      '}\n' +
-      '评分规则：scores 中每项必须是0到10的数字；依据公开可验证信息评分，无法确认时填5，不得编造。\n' + priorityCriteria + '\n';
+      '  "notice": "投递注意事项（1-2条，用分号分隔）"\n' +
+      '}\n';
     if (userTargetPosition && userTargetPosition !== '未指定') {
       userPrompt += '用户求职目标岗位是"' + userTargetPosition + '"，请优先推荐与" ' + userTargetPosition + '"匹配的岗位，不要推荐无关岗位。\n';
     }
@@ -5613,7 +5238,7 @@ async function aiFillCompany() {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0.2,
+        temperature: 0.7,
         max_tokens: 1500
       })
     });
@@ -5635,9 +5260,6 @@ async function aiFillCompany() {
     }
 
     if (!parsed) throw new Error('AI 返回格式解析失败');
-
-    // The model supplies evidence-based dimension scores; priority is calculated locally.
-    const priorityAssessment = calculateCareerPriority(parsed.priorityAssessment);
 
     // Fill form fields — 已有用户输入的不覆盖
     document.getElementById("cmCompany").value = company;
@@ -5662,17 +5284,7 @@ async function aiFillCompany() {
     }
     if (noticeToFill) document.getElementById("cmNotice").value = noticeToFill;
 
-    if (priorityAssessment) {
-      document.getElementById("cmPriority").value = priorityAssessment.priority;
-    }
-
     let msg = '<div class="cm-ai-success">✅ AI 已填充信息，你可以在下方修改后提交</div>';
-    if (priorityAssessment) {
-      const priorityText = { high: '高', mid: '中', low: '低' }[priorityAssessment.priority];
-      msg += '<div style="font-size:0.74rem;color:var(--text-secondary);margin-top:4px;">📊 10维加权评分 ' + priorityAssessment.score + '/100，已建议为“' + priorityText + '”优先级（提交前可调整）</div>';
-    } else {
-      msg += '<div style="font-size:0.74rem;color:var(--text-secondary);margin-top:4px;">ℹ️ 评分信息不完整，已保留你原先选择的优先级</div>';
-    }
     if (parsed.positions && parsed.positions.length > 0) {
       const recText = parsed.positions.join('、');
       if (userHasPosition) {
@@ -5822,6 +5434,18 @@ function submitCompanyModal() {
     return;
   }
 
+  // Duplicate check: MOMO default companies
+  if (typeof MOMO_DEFAULTS !== 'undefined') {
+    const dupDefault = MOMO_DEFAULTS.find(d => (d.company || '').replace(/\s/g, '').toLowerCase() === normalizedCompany);
+    if (dupDefault) {
+      showToast('「' + dupDefault.company + '」已在列表中，已定位到该卡片');
+      closeCompanyModal();
+      render();
+      setTimeout(() => scrollToCard(dupDefault.id, true), 100);
+      return;
+    }
+  }
+
   st._custom_companies.push(newCompany);
   // Fix 5: Initialize state with note
   st[newCompany.id] = { positions: [], note: newCompany.note };
@@ -5837,12 +5461,29 @@ function submitCompanyModal() {
 }
 
 function deleteCustomCompany(customId) {
-  if (!confirm("确定要将此公司移入回收站吗？可在回收站恢复。")) return;
+  if (!confirm("确定要删除这个自定义公司吗？相关岗位数据也会被清除。")) return;
+
   const st = loadState();
-  if (!moveCompanyToTrash(st, customId, '手动移除')) return;
+  // 记录被删除的公司（防止 initMomoDefaults 或云端同步把它补回来）
+  if (!st._deleted_companies) st._deleted_companies = [];
+  if (st._custom_companies) {
+    const deleted = st._custom_companies.find(c => c.id === customId);
+    if (deleted) {
+      const name = (deleted.company || '').replace(/\s/g, '').toLowerCase();
+      if (!st._deleted_companies.includes(name)) {
+        st._deleted_companies.push(name);
+      }
+      // 同时记录 id，防止同公司不同 id 的情况
+      if (!st._deleted_companies.includes(customId)) {
+        st._deleted_companies.push(customId);
+      }
+    }
+    st._custom_companies = st._custom_companies.filter(c => c.id !== customId);
+  }
+  // Also remove position data for this company
+  delete st[customId];
   saveState(st);
   render();
-  showToast('已移入回收站');
 }
 
 // ===== AI Recommend Direct (from empty state or sidebar) =====
@@ -6059,16 +5700,6 @@ function getUserPosition() {
   } catch(e) { return ''; }
 }
 
-function updateDirectionHelpTip() {
-  const tip = document.getElementById('directionHelpTip');
-  if (tip) tip.style.display = localStorage.getItem('jobpulse_direction_help_tip_closed') ? 'none' : 'flex';
-}
-
-function dismissDirectionHelpTip() {
-  localStorage.setItem('jobpulse_direction_help_tip_closed', '1');
-  updateDirectionHelpTip();
-}
-
 // Update direction bar display
 function updateDirectionBar() {
   const bar = document.getElementById('directionBar');
@@ -6093,7 +5724,6 @@ function updateDirectionBar() {
   } else {
     display.innerHTML = '<span class="direction-placeholder">点击设置求职方向</span>';
   }
-  updateDirectionHelpTip();
 }
 
 // Toggle direction editor visibility
@@ -6106,8 +5736,6 @@ function toggleDirectionEditor() {
   if (isHidden) {
     // Show editor and populate with current values
     bar.style.display = 'none';
-    const tip = document.getElementById('directionHelpTip');
-    if (tip) tip.style.display = 'none';
     editor.style.display = 'block';
     populateDirectionEditor();
   }
@@ -6162,7 +5790,6 @@ function cancelDirectionEditor() {
   const editor = document.getElementById('directionEditor');
   if (bar) bar.style.display = 'flex';
   if (editor) editor.style.display = 'none';
-  updateDirectionHelpTip();
 }
 
 // Save direction
@@ -6443,7 +6070,6 @@ function switchTab(tabName) {
 // ===== Render =====
 function render() {
   _initIndustryKeywords(); // Ensure INDUSTRY_KEYWORDS is initialized
-  updateRecycleHelpTip();
   const state = loadState();
   const main = document.getElementById("mainContent");
   main.innerHTML = "";
@@ -6480,7 +6106,6 @@ function render() {
       <div class="empty-state-desc">添加你的第一个公司，开始记录求职投递进度吧</div>
       <div class="empty-state-actions">
         <button class="empty-state-btn-primary" onclick="openCompanyModal()">+ 添加公司</button>
-        <button class="empty-state-btn-secondary" onclick="openCompanyLibrary()">📚 搜索公司库</button>
         <button class="empty-state-btn-secondary" onclick="aiRecommendDirect()">🤖 AI 推荐公司</button>
       </div>
     `;
@@ -6995,7 +6620,6 @@ async function initApp() {
 
         const hasLocalData = localData && Object.keys(localData).length > 0;
         const hasGistData = gistData && Object.keys(gistData).length > 0;
-        let hasSyncConflict = false;
 
         // 数据保护：检查 Gist 数据完整性
         if (hasGistData) {
@@ -7003,23 +6627,16 @@ async function initApp() {
           const hasProgressData = Object.keys(gistData).some(k => !k.startsWith('_') && gistData[k]?.positions?.length > 0);
           
           if (gistCompanies.length > 0 || hasProgressData) {
-            const remoteState = convertGistDataToLocal(gistData);
-            if (hasLocalData && JSON.stringify(remoteState) !== JSON.stringify(localData)) {
-              _pendingSyncData = gistData;
-              hasSyncConflict = true;
-              showSyncConflictModal();
-              console.warn('[initApp] 恢复绑定：本地与云端数据不同，等待用户选择');
-            } else if (!hasLocalData) {
-              saveStateToLocal(remoteState);
-              console.log('[initApp] 恢复绑定：Gist 数据有效，已同步到本地');
-            }
+            // Gist 数据有效，覆盖本地
+            saveStateToLocal(convertGistDataToLocal(gistData));
+            console.log('[initApp] 恢复绑定：Gist 数据有效，已同步到本地');
           } else if (hasLocalData) {
             // Gist 数据无效，保留本地数据
             console.warn('[initApp] 恢复绑定：Gist 数据不完整，保留本地数据');
           }
         }
 
-        if (!hasSyncConflict) setSyncStatus("synced", "✅ 已同步");
+        setSyncStatus("synced", "✅ 已同步");
         setupRealtimeListener();
         updateSyncCodeUI();
         // 已有云端数据时不再注入默认模板公司，避免重复添加
@@ -7053,7 +6670,6 @@ async function initApp() {
 
         const hasLocalData = localData && Object.keys(localData).length > 0;
         const hasGistData = gistData && Object.keys(gistData).length > 0;
-        let hasSyncConflict = false;
         console.log('[initApp] hasLocalData:', hasLocalData, ', hasGistData:', hasGistData);
 
         // 数据保护：如果 Gist 数据为空但有本地数据，不覆盖本地
@@ -7063,28 +6679,22 @@ async function initApp() {
           const hasProgressData = Object.keys(gistData).some(k => !k.startsWith('_') && gistData[k]?.positions?.length > 0);
           
           if (gistCompanies.length > 0 || hasProgressData) {
-            const remoteState = convertGistDataToLocal(gistData);
-            if (hasLocalData && JSON.stringify(remoteState) !== JSON.stringify(localData)) {
-              _pendingSyncData = gistData;
-              hasSyncConflict = true;
-              showSyncConflictModal();
-              console.warn('[initApp] 本地与云端数据不同，等待用户选择');
-            } else if (!hasLocalData) {
-              saveStateToLocal(remoteState);
-              setSyncStatus("synced", "✅ 已从云端同步");
-              console.log('[initApp] Gist 数据有效，已同步到本地');
-            }
+            // Gist 数据有效，覆盖本地
+            saveStateToLocal(convertGistDataToLocal(gistData));
+            setSyncStatus("synced", "✅ 已从云端同步");
+            console.log('[initApp] Gist 数据有效，已同步到本地');
           } else if (hasLocalData) {
-            console.warn('[initApp] Gist 数据不完整，保留本地数据，等待手动同步');
-            pendingSync = true;
-            setSyncStatus("synced", "⚠️ 云端数据不完整，本地数据待上传");
+            // Gist 数据无效但本地有数据，保留本地并上传
+            console.warn('[initApp] Gist 数据不完整，保留本地数据并上传');
+            await syncToGist(localData);
+            setSyncStatus("synced", "✅ 云端数据已更新");
           } else {
             setSyncStatus("synced", "✅ 同步码已绑定");
           }
         } else if (hasLocalData) {
-          // Do not silently upload local data while binding a sync code.
-          pendingSync = true;
-          setSyncStatus("synced", "⚠️ 云端无数据，本地数据待上传");
+          // 上传本地数据到云端
+          await syncToGist(localData);
+          setSyncStatus("synced", "✅ 本地数据已上传到云端");
         } else {
           setSyncStatus("synced", "✅ 同步码已绑定");
         }
@@ -7133,16 +6743,6 @@ window.addEventListener("offline", () => {
 </script>
 
 <!-- Add company modal -->
-<div class="modal-overlay" id="companyLibraryModal">
-  <div class="modal-box" style="max-width:680px">
-    <div class="modal-title">📚 公司资料库</div>
-    <div class="modal-desc" style="color:#555;line-height:1.6">资料库只用于查询，不会自动加入“我的投递”。点击结果中的“加入我的投递”后，才会保存该公司。</div>
-    <input class="library-search-input" id="companyLibraryInput" type="search" placeholder="搜索公司、岗位、行业或城市" oninput="renderCompanyLibraryResults()">
-    <div class="library-results" id="companyLibraryResults"></div>
-    <div class="modal-actions" style="margin-top:16px"><button class="modal-btn" onclick="closeCompanyLibrary()">关闭</button></div>
-  </div>
-</div>
-
 <div class="company-modal-overlay" id="companyModal">
   <div class="company-modal-box">
     <div class="modal-title">✨ 添加新公司</div>
@@ -8233,6 +7833,26 @@ window.addEventListener("offline", () => {
       // Load existing API key into input
       const existingKey = localStorage.getItem('deepseek_api_key') || '';
       document.getElementById('settingsApiKey').value = existingKey;
+      // Load existing profile into inputs
+      try {
+        const profile = JSON.parse(localStorage.getItem('user_profile') || '{}');
+        const posInput = document.getElementById('settingsPosition');
+        const indSelect = document.getElementById('settingsIndustry');
+        const indCustom = document.getElementById('settingsIndustryCustom');
+        if (posInput) posInput.value = (profile.position && profile.position !== '未指定') ? profile.position : '';
+        if (indSelect) {
+          const currentIndustry = getUserIndustry() || '未指定';
+          const options = Array.from(indSelect.options).map(o => o.value);
+          if (options.includes(currentIndustry)) {
+            indSelect.value = currentIndustry;
+          } else if (currentIndustry && currentIndustry !== '未指定' && currentIndustry !== '其他') {
+            indSelect.value = '__custom__';
+            if (indCustom) { indCustom.style.display = ''; indCustom.value = currentIndustry; }
+          } else {
+            indSelect.value = '其他';
+          }
+        }
+      } catch(e) {}
       // Update diagnostic info
       try {
         const diagState = loadStateFromLocal();
@@ -8284,8 +7904,51 @@ window.addEventListener("offline", () => {
     }
   };
 
+  // Save profile settings (industry/position)
+  window.saveProfileSettings = function() {
+    const position = document.getElementById('settingsPosition').value.trim();
+    const indSelect = document.getElementById('settingsIndustry');
+    const indCustom = document.getElementById('settingsIndustryCustom');
+    let industry = indSelect.value;
+    if (industry === '__custom__') {
+      industry = indCustom.value.trim() || '其他';
+    }
+
+    const profile = JSON.parse(localStorage.getItem('user_profile') || '{}');
+    // Capture old values BEFORE updating
+    const oldIndustry = profile.industry || '未指定';
+    const oldPosition = profile.position || '未指定';
+
+    profile.position = position || '未指定';
+    profile.industry = industry;
+    localStorage.setItem('user_profile', JSON.stringify(profile));
+
+    // Determine what changed for informative toast
+    const changed = [];
+    if ((position || '未指定') !== oldPosition) changed.push('岗位');
+    if (industry !== oldIndustry) changed.push('行业');
+
+    // Build informative toast
+    let msg = '✅ 求职方向已更新';
+    if (changed.length > 0) {
+      msg += '（' + changed.join('、') + '已变更，已有数据不受影响）';
+    }
+    showToast(msg);
+    document.getElementById('settingsPanel').classList.remove('active');
+    // Re-render to apply industry classification
+    render();
+  };
+
   // Handle custom industry dropdown toggle
   (function() {
+    const settingsInd = document.getElementById('settingsIndustry');
+    const settingsCustom = document.getElementById('settingsIndustryCustom');
+    if (settingsInd && settingsCustom) {
+      settingsInd.addEventListener('change', function() {
+        settingsCustom.style.display = this.value === '__custom__' ? '' : 'none';
+        if (this.value !== '__custom__') settingsCustom.value = '';
+      });
+    }
     const onboardInd = document.getElementById('aiOnboardIndustry');
     const onboardCustom = document.getElementById('aiOnboardIndustryCustom');
     if (onboardInd && onboardCustom) {
