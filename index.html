@@ -333,6 +333,32 @@
     transition: color 0.2s;
   }
   .search-bar .search-clear:hover { color: #666; }
+
+  .search-location-hint {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: -5px 0 12px;
+    padding: 7px 10px;
+    border: 1px solid #d9e8d2;
+    border-radius: 8px;
+    background: #f4faef;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.45;
+  }
+  .search-location-hint.visible { display: flex; }
+  .search-location-result {
+    border: 0;
+    border-radius: 999px;
+    padding: 3px 8px;
+    background: #e0efd8;
+    color: #295c22;
+    cursor: pointer;
+    font: inherit;
+  }
+  .search-location-result:hover { background: #cde5c2; }
   
   /* No search results message */
   .search-no-result {
@@ -2708,6 +2734,7 @@
   <input type="text" id="searchInput" placeholder="搜索公司名…" oninput="onSearchInput()" onkeydown="onSearchKeydown(event)">
   <button class="search-clear" id="searchClear" onclick="clearSearch()"></button>
 </div>
+<div class="search-location-hint" id="searchLocationHint" aria-live="polite"></div>
 
 <!-- Industry Tab Bar -->
 <div class="tab-bar" id="industryTabBar" style="display:none;"></div>
@@ -6312,6 +6339,7 @@ function onSearchInput() {
   const query = document.getElementById("searchInput").value.trim().toLowerCase();
   _lastSearchQuery = query; // 保存搜索关键词
   const noResultEl = document.getElementById("searchNoResult");
+  const locationHint = document.getElementById("searchLocationHint");
 
   const cards = document.querySelectorAll(".card");
   
@@ -6321,26 +6349,63 @@ function onSearchInput() {
       c.classList.remove("search-hidden");
     });
     if (noResultEl) noResultEl.classList.remove("visible");
+    if (locationHint) {
+      locationHint.replaceChildren();
+      locationHint.classList.remove('visible');
+    }
     return;
   }
   
   // Search and hide/show cards
-  let matchCount = 0;
+  const matches = new Map();
+  let hasMatchInCurrentTab = false;
   cards.forEach(c => {
     const nameEl = c.querySelector(".company-name");
     if (!nameEl) return;
     const name = nameEl.textContent.toLowerCase();
     if (name.includes(query)) {
       c.classList.remove("search-hidden");
-      matchCount++;
+      const section = c.closest('.company-section');
+      const tabName = section ? section.dataset.tabName : '';
+      const companyId = c.dataset.cardId;
+      if (!matches.has(companyId)) matches.set(companyId, { name: nameEl.textContent.trim(), tabs: [] });
+      const match = matches.get(companyId);
+      if (tabName && !match.tabs.includes(tabName)) match.tabs.push(tabName);
+      if (tabName === _activeIndustryTab) hasMatchInCurrentTab = true;
     } else {
       c.classList.add("search-hidden");
     }
   });
+
+  if (locationHint) {
+    locationHint.replaceChildren();
+    if (matches.size) {
+      const label = document.createElement('span');
+      label.textContent = '找到 ' + matches.size + ' 家公司，所在标签：';
+      locationHint.appendChild(label);
+      matches.forEach(function(match, companyId) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'search-location-result';
+        button.textContent = match.name + ' · ' + (match.tabs.join(' / ') || '未分类');
+        button.addEventListener('click', function() { goToSearchResult(companyId, match.tabs[0]); });
+        locationHint.appendChild(button);
+      });
+      locationHint.classList.add('visible');
+    } else {
+      locationHint.classList.remove('visible');
+    }
+  }
+
+  // Only switch automatically for one company. Multiple matches keep their tag locations visible above.
+  if (matches.size === 1 && !hasMatchInCurrentTab) {
+    const firstMatch = matches.entries().next().value;
+    goToSearchResult(firstMatch[0], firstMatch[1].tabs[0], false);
+  }
   
   // Show/hide "no results" message
   if (noResultEl) {
-    if (matchCount === 0) {
+    if (matches.size === 0) {
       noResultEl.classList.add("visible");
     } else {
       noResultEl.classList.remove("visible");
@@ -6351,12 +6416,17 @@ function onSearchInput() {
 function clearSearch() {
   const inp = document.getElementById("searchInput");
   const noResultEl = document.getElementById("searchNoResult");
+  const locationHint = document.getElementById("searchLocationHint");
   if (inp) inp.value = "";
   _lastSearchQuery = ''; // 清除搜索关键词
   // Show all cards
   document.querySelectorAll(".card.search-hidden").forEach(c => c.classList.remove("search-hidden"));
   // Hide "no results" message
   if (noResultEl) noResultEl.classList.remove("visible");
+  if (locationHint) {
+    locationHint.replaceChildren();
+    locationHint.classList.remove('visible');
+  }
   hideSearchBar();
 }
 
@@ -6373,6 +6443,11 @@ function scrollToCard(companyId, highlight) {
     card.classList.add("highlight-flash");
     setTimeout(() => card.classList.remove("highlight-flash"), 2000);
   }
+}
+
+function goToSearchResult(companyId, tabName, highlight) {
+  if (tabName && _activeIndustryTab !== tabName) switchTab(tabName);
+  setTimeout(function() { scrollToCard(companyId, highlight !== false); }, tabName ? 80 : 0);
 }
 
 // ===== Scroll to status =====
