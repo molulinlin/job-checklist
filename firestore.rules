@@ -1,0 +1,10 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // v9: every authenticated account can access only its own single state document.
+    match /users/{userId}/private/state {
+      allow read, create, update: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

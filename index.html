@@ -2618,19 +2618,41 @@
 
 <header>
   <h1>⚡ JobPulse 职达</h1>
-  <p class="subtitle">27届秋招 · 更新于 2026.09.05 · v8</p>
+  <p class="subtitle">27届秋招 · 更新于 2026.09.16 · v9 独立账户同步</p>
 </header>
 
+<!-- v9 account sync: new users use a private Firebase account instead of the shared legacy Gist. -->
+<div class="sync-code-wrap" id="v9AccountArea">
+  <div class="sync-code-title">☁️ v9 独立账户同步</div>
+  <div id="v9AccountUnbound">
+    <div class="sync-code-row" style="margin-bottom:8px;">
+      <input class="sync-code-input" type="text" id="v9AccountId" placeholder="设置同步 ID（3-24 位）" maxlength="24" autocomplete="username">
+    </div>
+    <div class="sync-code-row">
+      <input class="sync-code-input" type="password" id="v9AccountPassword" placeholder="设置或输入密码（至少 8 位）" maxlength="128" autocomplete="current-password">
+      <button class="sync-code-btn" type="button" onclick="v9LoginAccount()">登录并同步</button>
+    </div>
+    <div class="sync-code-row" style="margin-top:8px;">
+      <input class="sync-code-input" type="password" id="v9AccountPasswordConfirm" placeholder="注册时再次输入密码" maxlength="128" autocomplete="new-password">
+    </div>
+    <div style="margin-top:8px;"><button class="sync-code-btn" type="button" onclick="v9RegisterAccount()">注册新账户</button></div>
+    <div class="sync-code-hint">每个同步 ID 对应一份独立档案。首次注册可将当前设备上的旧本地数据迁入；不使用短信，也不需要 GitHub Token。请自行保存密码，暂不支持找回。</div>
+  </div>
+  <div id="v9AccountBound" style="display:none;">
+    <div class="sync-code-bound"><span class="sync-code-label">当前账户：</span><span class="sync-code-value" id="v9AccountDisplay"></span><button class="sync-code-btn-unbind" type="button" onclick="v9LogoutAccount()">退出</button></div>
+    <div class="sync-code-hint" id="v9AccountHint">个人档案仅对当前账户可读写。</div>
+  </div>
+</div>
 
 <div class="sync-code-wrap" id="syncCodeArea">
-  <div class="sync-code-title">🔗 同步码</div>
+  <div class="sync-code-title">🔗 旧版同步码迁移</div>
   <!-- Unbound state -->
   <div id="syncCodeUnbound">
     <div class="sync-code-row">
       <input class="sync-code-input" type="text" id="syncCodeInput" placeholder="输入同步码（如 momo2026）" maxlength="50" autocomplete="off">
       <button class="sync-code-btn" id="syncCodeBindBtn" disabled onclick="bindSyncCodeUI()">绑定同步码</button>
     </div>
-    <div class="sync-code-hint">输入同一个同步码可在多台设备间同步数据。同步码区分大小写。</div>
+    <div class="sync-code-hint">仅供旧版用户恢复并迁移历史档案。新用户请使用上方 v9 独立账户，不要将此处同步码作为账号使用。</div>
   </div>
   <!-- Bound state -->
   <div id="syncCodeBound" style="display:none;">
@@ -2920,6 +2942,220 @@ async function hashSyncCode(code) {
   return hashHex;
 }
 
+// ===== v9 Independent Account Sync (Firebase Auth + per-user Firestore document) =====
+// Public Firebase web configuration is safe to ship; Firestore rules in firestore.rules enforce ownership.
+const V9_FIREBASE_API_KEY = 'AIzaSyAgNy37pCBs_TykOJFxphFqUSiqruhajEc';
+const V9_FIREBASE_PROJECT = 'find-job---checklist';
+const V9_ACCOUNT_STORAGE_KEY = 'jobpulse_v9_account';
+const V9_STATE_OWNER_KEY = 'jobpulse_v9_state_owner';
+const V9_ACCOUNT_EMAIL_DOMAIN = 'jobpulse.local';
+let v9Account = null;
+let v9RemoteUpdateTime = null;
+let v9PollIntervalId = null;
+
+function v9NormalizeAccountId(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function v9AccountEmail(accountId) {
+  return v9NormalizeAccountId(accountId) + '@' + V9_ACCOUNT_EMAIL_DOMAIN;
+}
+
+function v9ValidateCredentials(accountId, password) {
+  if (!/^[a-z0-9_-]{3,24}$/.test(v9NormalizeAccountId(accountId))) {
+    throw new Error('同步 ID 需为 3-24 位小写字母、数字、下划线或连字符');
+  }
+  if (String(password || '').length < 8) throw new Error('密码至少需要 8 位');
+}
+
+async function v9AuthRequest(path, payload) {
+  const response = await fetch('https://identitytoolkit.googleapis.com/v1/' + path + '?key=' + V9_FIREBASE_API_KEY, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+  });
+  const data = await response.json().catch(function() { return {}; });
+  if (!response.ok) throw new Error((data.error && data.error.message) || '账户服务请求失败');
+  return data;
+}
+
+function v9RememberAccount(account) {
+  v9Account = account;
+  localStorage.setItem(V9_ACCOUNT_STORAGE_KEY, JSON.stringify(account));
+}
+
+function v9UpdateAccountUI() {
+  const unbound = document.getElementById('v9AccountUnbound');
+  const bound = document.getElementById('v9AccountBound');
+  const display = document.getElementById('v9AccountDisplay');
+  const legacyArea = document.getElementById('syncCodeArea');
+  if (!unbound || !bound || !display) return;
+  unbound.style.display = v9Account ? 'none' : 'block';
+  bound.style.display = v9Account ? 'block' : 'none';
+  if (legacyArea) legacyArea.style.display = localStorage.getItem(V9_STATE_OWNER_KEY) ? 'none' : '';
+  if (v9Account) display.textContent = v9Account.accountId;
+}
+
+function v9FirestoreUrl() {
+  if (!v9Account || !v9Account.uid) return null;
+  return 'https://firestore.googleapis.com/v1/projects/' + V9_FIREBASE_PROJECT + '/databases/(default)/documents/users/' + encodeURIComponent(v9Account.uid) + '/private/state';
+}
+
+async function v9ReadCloudState() {
+  const url = v9FirestoreUrl();
+  if (!url || !v9Account || !v9Account.idToken) return null;
+  const response = await fetch(url, { headers: { 'Authorization': 'Bearer ' + v9Account.idToken } });
+  if (response.status === 404) return null;
+  const data = await response.json().catch(function() { return {}; });
+  if (!response.ok) throw new Error((data.error && data.error.message) || '读取云端档案失败');
+  const raw = data.fields && data.fields.stateJson && data.fields.stateJson.stringValue;
+  if (typeof raw !== 'string') return { state: {}, updateTime: data.updateTime || null };
+  try { return { state: JSON.parse(raw), updateTime: data.updateTime || null }; }
+  catch (error) { throw new Error('云端档案格式异常，已停止同步以保护本地数据'); }
+}
+
+async function v9WriteCloudState(state, force) {
+  const baseUrl = v9FirestoreUrl();
+  if (!baseUrl || !v9Account || !v9Account.idToken) return;
+  let url = baseUrl;
+  // ponytail: one-document optimistic lock; add per-card records only when concurrent editing volume requires it.
+  if (!force) {
+    url += '?' + (v9RemoteUpdateTime
+      ? 'currentDocument.updateTime=' + encodeURIComponent(v9RemoteUpdateTime)
+      : 'currentDocument.exists=false');
+  }
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Authorization': 'Bearer ' + v9Account.idToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: { stateJson: { stringValue: JSON.stringify(state) }, updatedAt: { timestampValue: new Date().toISOString() } } })
+  });
+  const data = await response.json().catch(function() { return {}; });
+  if (!response.ok) throw new Error((data.error && data.error.message) || '写入云端档案失败');
+  v9RemoteUpdateTime = data.updateTime || v9RemoteUpdateTime;
+}
+
+async function syncToV9Account(state, force) {
+  if (!v9Account) return;
+  try {
+    setSyncStatus('syncing', '☁️ 正在同步独立账户...');
+    await v9WriteCloudState(state, !!force);
+    pendingSync = false;
+    setSyncStatus('synced', '✅ v9 账户已同步');
+  } catch (error) {
+    if (!force && /FAILED_PRECONDITION|ABORTED/.test(error.message || '')) {
+      const remote = await v9ReadCloudState().catch(function() { return null; });
+      if (remote) { _pendingSyncData = remote.state; v9RemoteUpdateTime = remote.updateTime; showSyncConflictModal(); return; }
+    }
+    pendingSync = true;
+    setSyncStatus('error', '⚠️ 账户同步失败，本地数据已保留');
+    console.warn('[v9] sync failed:', error);
+  }
+}
+
+async function v9LoadAccountState() {
+  const remote = await v9ReadCloudState();
+  const local = loadStateFromLocal();
+  const hasLocal = local && Object.keys(local).length > 0;
+  const sameAccountLocalState = localStorage.getItem(V9_STATE_OWNER_KEY) === v9Account.uid;
+  if (!remote) {
+    const upload = !hasLocal || sameAccountLocalState || confirm('该账户暂无云端档案。是否将当前设备的本地投递数据迁入此账户？');
+    const initialState = upload && hasLocal ? local : {};
+    // Never leave a previous account's local cards visible after the user declines migration.
+    saveStateToLocal(initialState);
+    localStorage.setItem(V9_STATE_OWNER_KEY, v9Account.uid);
+    await v9WriteCloudState(initialState, true);
+    return;
+  }
+  v9RemoteUpdateTime = remote.updateTime;
+  if (sameAccountLocalState && hasLocal && JSON.stringify(local) !== JSON.stringify(remote.state)) {
+    _pendingSyncData = remote.state;
+    showSyncConflictModal();
+  } else {
+    saveStateToLocal(remote.state);
+    localStorage.setItem(V9_STATE_OWNER_KEY, v9Account.uid);
+  }
+}
+
+function v9StartPolling() {
+  if (v9PollIntervalId) clearInterval(v9PollIntervalId);
+  v9PollIntervalId = setInterval(async function() {
+    if (!v9Account) return;
+    try {
+      const remote = await v9ReadCloudState();
+      if (remote && remote.updateTime !== v9RemoteUpdateTime && JSON.stringify(remote.state) !== JSON.stringify(loadStateFromLocal())) {
+        _pendingSyncData = remote.state;
+        v9RemoteUpdateTime = remote.updateTime;
+        showSyncConflictModal();
+      }
+    } catch (error) { console.warn('[v9] poll failed:', error); }
+  }, 5 * 60 * 1000);
+}
+
+async function v9ActivateAccount(response, accountId) {
+  v9RememberAccount({ accountId: v9NormalizeAccountId(accountId), uid: response.localId, idToken: response.idToken, refreshToken: response.refreshToken });
+  if (syncIntervalId) { clearInterval(syncIntervalId); syncIntervalId = null; }
+  v9UpdateAccountUI();
+  await v9LoadAccountState();
+  v9StartPolling();
+  setSyncStatus('synced', '✅ v9 账户已登录');
+  render();
+}
+
+async function v9RegisterAccount() {
+  const accountId = document.getElementById('v9AccountId').value;
+  const password = document.getElementById('v9AccountPassword').value;
+  const confirmation = document.getElementById('v9AccountPasswordConfirm').value;
+  try {
+    v9ValidateCredentials(accountId, password);
+    if (password !== confirmation) throw new Error('两次输入的密码不一致');
+    const result = await v9AuthRequest('accounts:signUp', { email: v9AccountEmail(accountId), password: password, returnSecureToken: true });
+    await v9ActivateAccount(result, accountId);
+  } catch (error) { showCustomAlert('注册失败：' + v9ReadableAuthError(error.message)); }
+}
+
+async function v9LoginAccount() {
+  const accountId = document.getElementById('v9AccountId').value;
+  const password = document.getElementById('v9AccountPassword').value;
+  try {
+    v9ValidateCredentials(accountId, password);
+    const result = await v9AuthRequest('accounts:signInWithPassword', { email: v9AccountEmail(accountId), password: password, returnSecureToken: true });
+    await v9ActivateAccount(result, accountId);
+  } catch (error) { showCustomAlert('登录失败：' + v9ReadableAuthError(error.message)); }
+}
+
+function v9ReadableAuthError(message) {
+  if (message === 'PASSWORD_LOGIN_DISABLED') return '账户服务尚未启用，请联系维护者完成 v9 发布设置';
+  if (message === 'EMAIL_EXISTS') return '该同步 ID 已被注册，请直接登录';
+  if (message === 'INVALID_LOGIN_CREDENTIALS' || message === 'EMAIL_NOT_FOUND' || message === 'INVALID_PASSWORD') return '同步 ID 或密码错误';
+  return message || '请检查网络后重试';
+}
+
+function v9LogoutAccount() {
+  if (!confirm('退出后本机保留当前数据，但不再自动同步。确定退出吗？')) return;
+  localStorage.removeItem(V9_ACCOUNT_STORAGE_KEY);
+  v9Account = null; v9RemoteUpdateTime = null;
+  if (v9PollIntervalId) { clearInterval(v9PollIntervalId); v9PollIntervalId = null; }
+  v9UpdateAccountUI();
+  setSyncStatus('initial', '📴 已退出 v9 账户，数据保留在本机');
+}
+
+async function restoreV9Account() {
+  const saved = JSON.parse(localStorage.getItem(V9_ACCOUNT_STORAGE_KEY) || 'null');
+  if (!saved || !saved.refreshToken || !saved.uid) return false;
+  try {
+    const response = await fetch('https://securetoken.googleapis.com/v1/token?key=' + V9_FIREBASE_API_KEY, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(saved.refreshToken)
+    });
+    const data = await response.json().catch(function() { return {}; });
+    if (!response.ok) throw new Error('刷新登录状态失败');
+    v9RememberAccount({ accountId: saved.accountId, uid: data.user_id, idToken: data.id_token, refreshToken: data.refresh_token });
+    v9UpdateAccountUI();
+    return true;
+  } catch (error) {
+    localStorage.removeItem(V9_ACCOUNT_STORAGE_KEY);
+    return false;
+  }
+}
+
 // ===== Sync Code UI =====
 function updateSyncCodeUI() {
   const unbound = document.getElementById("syncCodeUnbound");
@@ -3143,6 +3379,7 @@ function syncUseRemote() {
   }
   converted._trash_companies = mergeTrashEntries(converted._trash_companies, localData._trash_companies);
   saveStateToLocal(converted);
+  if (v9Account) localStorage.setItem(V9_STATE_OWNER_KEY, v9Account.uid);
   if (!converted._defaults_initialized) initMomoDefaults();
   deduplicateCompanies();
   setSyncStatus("synced", "✅ 已使用云端数据");
@@ -3164,7 +3401,8 @@ function syncUseRemote() {
 async function syncKeepLocal() {
   if (!confirm("⚠️ 确定要保留本地数据并覆盖云端吗？\n\n云端当前的数据将被本地数据替换。")) return;
   const localData = loadStateFromLocal();
-  await syncToGist(localData);
+  if (v9Account) await syncToV9Account(localData, true);
+  else await syncToGist(localData);
   setSyncStatus("synced", "✅ 已保留本地数据并上传云端");
   closeSyncConflictModal();
 }
@@ -3199,7 +3437,9 @@ function syncMergeData() {
   localData._trash_companies = mergeTrashEntries(localData._trash_companies, remoteData._trash_companies);
   
   saveStateToLocal(localData);
+  if (v9Account) localStorage.setItem(V9_STATE_OWNER_KEY, v9Account.uid);
   deduplicateCompanies();
+  if (v9Account) syncToV9Account(localData, true);
   setSyncStatus("synced", "✅ 已合并 " + added + " 个新公司");
   render();
   closeSyncConflictModal();
@@ -3228,6 +3468,27 @@ async function updatePasswordStatus() {
 // Apply remote data when user clicks refresh (fallback for manual sync)
 async function applyRemoteData() {
   console.log('[applyRemoteData] 用户手动触发同步');
+  if (v9Account) {
+    try {
+      const remote = await v9ReadCloudState();
+      if (!remote) { setSyncStatus('synced', '✅ 云端档案尚未创建'); return; }
+      v9RemoteUpdateTime = remote.updateTime;
+      if (JSON.stringify(remote.state) !== JSON.stringify(loadStateFromLocal())) {
+        _pendingSyncData = remote.state;
+        showSyncConflictModal();
+      } else {
+        setSyncStatus('synced', '✅ v9 账户已是最新');
+      }
+    } catch (error) {
+      console.warn('[v9] manual refresh failed:', error);
+      setSyncStatus('error', '⚠️ 云端档案读取失败，本地数据未改动');
+    }
+    return;
+  }
+  if (localStorage.getItem(V9_STATE_OWNER_KEY)) {
+    setSyncStatus('initial', '📴 请先登录 v9 账户后再同步');
+    return;
+  }
   if (window._pendingRemoteData) {
     saveStateToLocal(convertGistDataToLocal(window._pendingRemoteData));
     window._pendingRemoteData = null;
@@ -3890,8 +4151,13 @@ function loadState() {
 // Wrapper: saveState updates both localStorage and Gist
 function saveState(state) {
   saveStateToLocal(state);
-  console.log('[saveState] 保存数据到 Gist (sync), keys:', Object.keys(state).filter(k => k !== '_custom_companies' && state[k]?.positions?.length > 0));
-  syncToGist(state);
+  if (v9Account) {
+    localStorage.setItem(V9_STATE_OWNER_KEY, v9Account.uid);
+    syncToV9Account(state);
+  } else if (!localStorage.getItem(V9_STATE_OWNER_KEY)) {
+    console.log('[saveState] 保存数据到 Gist (legacy sync), keys:', Object.keys(state).filter(k => k !== '_custom_companies' && state[k]?.positions?.length > 0));
+    syncToGist(state);
+  }
 }
 
 // ===== Gist Sync =====
@@ -3959,6 +4225,8 @@ function showCustomAlert(message) {
 
 
 async function syncToGist(state) {
+  if (v9Account) return syncToV9Account(state);
+  if (localStorage.getItem(V9_STATE_OWNER_KEY)) return;
   if (!currentSyncHash) {
     console.warn('[syncToGist] 跳过: 无同步码');
     pendingSync = true;
@@ -7044,6 +7312,31 @@ async function initApp() {
     console.warn('[initApp] 公司资料库加载失败:', error);
   });
 
+  // v9 account takes precedence over legacy Gist recovery. Legacy data remains local until the user chooses migration.
+  if (await restoreV9Account()) {
+    try {
+      migrateState(loadStateFromLocal());
+      await v9LoadAccountState();
+      v9StartPolling();
+      setSyncStatus('synced', '✅ v9 账户已同步');
+    } catch (error) {
+      console.warn('[initApp] v9 account recovery failed:', error);
+      setSyncStatus('error', '⚠️ v9 云端档案读取失败，本地数据未改动');
+    }
+    render();
+    return;
+  }
+
+  // A signed-out v9 account must not silently fall back to the shared legacy Gist.
+  if (localStorage.getItem(V9_STATE_OWNER_KEY)) {
+    migrateState(loadStateFromLocal());
+    v9UpdateAccountUI();
+    updateSyncCodeUI();
+    setSyncStatus('initial', '📴 已退出 v9 账户，请登录后同步');
+    render();
+    return;
+  }
+
   // 1. 优先检查 URL 中的 sync 参数（解决手机浏览器清 localStorage 的问题）
   const urlParams = new URLSearchParams(window.location.search);
   const syncCodeFromUrl = urlParams.get('sync');
@@ -7204,6 +7497,12 @@ async function initApp() {
 
 // ===== Online/Offline Detection =====
 window.addEventListener("online", () => {
+  if (v9Account) {
+    syncToV9Account(loadStateFromLocal());
+    v9StartPolling();
+    return;
+  }
+  if (localStorage.getItem(V9_STATE_OWNER_KEY)) return;
   if (gistReady && currentSyncHash) {
     retrySync();
     setupRealtimeListener();
@@ -7316,7 +7615,7 @@ window.addEventListener("offline", () => {
     <div class="modal-title">⚡ 检测到数据差异</div>
     <div class="modal-desc" style="color:#555;line-height:1.6;margin:12px 0 20px">
       云端数据与本地数据不一致，请选择操作：<br>
-      <span style="font-size:12px;color:#999">（每5分钟检测一次，不影响正常使用）</span>
+      <span style="font-size:12px;color:#999">（系统定期检查云端变化，不影响正常使用）</span>
     </div>
     <div style="display:flex;flex-direction:column;gap:10px">
       <button class="modal-btn modal-btn-primary" onclick="syncUseRemote()" style="width:100%;text-align:left;padding:12px 16px">
