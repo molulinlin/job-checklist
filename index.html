@@ -2623,7 +2623,7 @@
 
 <!-- v9 account sync: new users use a private Firebase account instead of the shared legacy Gist. -->
 <div class="sync-code-wrap" id="v9AccountArea">
-  <div class="sync-code-title">☁️ v9 独立账户同步</div>
+  <div class="sync-code-title">☁️ 云端账户同步</div>
   <div id="v9AccountUnbound">
     <div class="sync-code-row" style="margin-bottom:8px;">
       <input class="sync-code-input" type="text" id="v9AccountId" placeholder="设置同步 ID（3-24 位）" maxlength="24" autocomplete="username">
@@ -2652,7 +2652,7 @@
       <input class="sync-code-input" type="text" id="syncCodeInput" placeholder="输入同步码（如 momo2026）" maxlength="50" autocomplete="off">
       <button class="sync-code-btn" id="syncCodeBindBtn" disabled onclick="bindSyncCodeUI()">绑定同步码</button>
     </div>
-    <div class="sync-code-hint">仅供旧版用户恢复并迁移历史档案。新用户请使用上方 v9 独立账户，不要将此处同步码作为账号使用。</div>
+    <div class="sync-code-hint">仅供旧版用户恢复并迁移历史档案。新用户请使用上方云端账户，不要将此处同步码作为账号使用。</div>
   </div>
   <!-- Bound state -->
   <div id="syncCodeBound" style="display:none;">
@@ -3035,17 +3035,17 @@ async function v9WriteCloudState(state, force) {
 async function syncToV9Account(state, force) {
   if (!v9Account) return;
   try {
-    setSyncStatus('syncing', '☁️ 正在同步独立账户...');
+    setSyncStatus('syncing', '☁️ 正在同步云端...');
     await v9WriteCloudState(state, !!force);
     pendingSync = false;
-    setSyncStatus('synced', '✅ v9 账户已同步');
+    setSyncStatus('synced', '✅ 云端已同步');
   } catch (error) {
     if (!force && /FAILED_PRECONDITION|ABORTED/.test(error.message || '')) {
       const remote = await v9ReadCloudState().catch(function() { return null; });
       if (remote) { _pendingSyncData = remote.state; v9RemoteUpdateTime = remote.updateTime; showSyncConflictModal(); return; }
     }
     pendingSync = true;
-    setSyncStatus('error', '⚠️ 账户同步失败，本地数据已保留');
+    setSyncStatus('error', '⚠️ 云端同步失败，本地数据已保留');
     console.warn('[v9] sync failed:', error);
   }
 }
@@ -3096,7 +3096,7 @@ async function v9ActivateAccount(response, accountId) {
   await v9LoadAccountState();
   v9UpdateAccountUI();
   v9StartPolling();
-  setSyncStatus('synced', '✅ v9 账户已登录');
+  setSyncStatus('synced', '✅ 云端已同步');
   render();
 }
 
@@ -3123,7 +3123,7 @@ async function v9LoginAccount() {
 }
 
 function v9ReadableAuthError(message) {
-  if (message === 'PASSWORD_LOGIN_DISABLED') return '账户服务尚未启用，请联系维护者完成 v9 发布设置';
+  if (message === 'PASSWORD_LOGIN_DISABLED') return '账户服务尚未启用，请联系维护者完成云端配置';
   if (message === 'EMAIL_EXISTS') return '该同步 ID 已被注册，请直接登录';
   if (message === 'INVALID_LOGIN_CREDENTIALS' || message === 'EMAIL_NOT_FOUND' || message === 'INVALID_PASSWORD') return '同步 ID 或密码错误';
   return message || '请检查网络后重试';
@@ -3135,7 +3135,7 @@ function v9LogoutAccount() {
   v9Account = null; v9RemoteUpdateTime = null;
   if (v9PollIntervalId) { clearInterval(v9PollIntervalId); v9PollIntervalId = null; }
   v9UpdateAccountUI();
-  setSyncStatus('initial', '📴 已退出 v9 账户，数据保留在本机');
+  setSyncStatus('initial', '📴 已退出云端账户，数据保留在本机');
 }
 
 async function restoreV9Account() {
@@ -3478,7 +3478,7 @@ async function applyRemoteData() {
         _pendingSyncData = remote.state;
         showSyncConflictModal();
       } else {
-        setSyncStatus('synced', '✅ v9 账户已是最新');
+        setSyncStatus('synced', '✅ 云端已是最新');
       }
     } catch (error) {
       console.warn('[v9] manual refresh failed:', error);
@@ -3487,7 +3487,7 @@ async function applyRemoteData() {
     return;
   }
   if (localStorage.getItem(V9_STATE_OWNER_KEY)) {
-    setSyncStatus('initial', '📴 请先登录 v9 账户后再同步');
+    setSyncStatus('initial', '📴 请先登录云端账户后再同步');
     return;
   }
   if (window._pendingRemoteData) {
@@ -7319,10 +7319,10 @@ async function initApp() {
       migrateState(loadStateFromLocal());
       await v9LoadAccountState();
       v9StartPolling();
-      setSyncStatus('synced', '✅ v9 账户已同步');
+      setSyncStatus('synced', '✅ 云端已同步');
     } catch (error) {
       console.warn('[initApp] v9 account recovery failed:', error);
-      setSyncStatus('error', '⚠️ v9 云端档案读取失败，本地数据未改动');
+      setSyncStatus('error', '⚠️ 云端档案读取失败，本地数据未改动');
     }
     render();
     return;
@@ -7333,7 +7333,7 @@ async function initApp() {
     migrateState(loadStateFromLocal());
     v9UpdateAccountUI();
     updateSyncCodeUI();
-    setSyncStatus('initial', '📴 已退出 v9 账户，请登录后同步');
+    setSyncStatus('initial', '📴 已退出云端账户，请登录后同步');
     render();
     return;
   }
