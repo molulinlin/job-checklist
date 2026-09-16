@@ -3094,6 +3094,7 @@ async function v9ActivateAccount(response, accountId) {
   if (syncIntervalId) { clearInterval(syncIntervalId); syncIntervalId = null; }
   v9UpdateAccountUI();
   await v9LoadAccountState();
+  v9UpdateAccountUI();
   v9StartPolling();
   setSyncStatus('synced', '✅ v9 账户已登录');
   render();
