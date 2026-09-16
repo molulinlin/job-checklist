@@ -2982,6 +2982,24 @@ function v9RememberAccount(account) {
   localStorage.setItem(V9_ACCOUNT_STORAGE_KEY, JSON.stringify(account));
 }
 
+function v9TokenExpiry(response) {
+  const seconds = Number(response && (response.expiresIn || response.expires_in));
+  return Date.now() + (Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 55 * 60 * 1000);
+}
+
+async function v9EnsureIdToken() {
+  if (!v9Account || !v9Account.refreshToken) throw new Error('登录信息缺失，请退出后重新登录');
+  if (v9Account.idToken && Number(v9Account.tokenExpiresAt) > Date.now() + 60 * 1000) return v9Account.idToken;
+  const response = await fetch('https://securetoken.googleapis.com/v1/token?key=' + V9_FIREBASE_API_KEY, {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(v9Account.refreshToken)
+  });
+  const data = await response.json().catch(function() { return {}; });
+  if (!response.ok || !data.id_token) throw new Error('登录已失效，请退出后重新登录');
+  v9RememberAccount({ accountId: v9Account.accountId, uid: data.user_id || v9Account.uid, idToken: data.id_token, refreshToken: data.refresh_token || v9Account.refreshToken, tokenExpiresAt: v9TokenExpiry(data) });
+  return v9Account.idToken;
+}
+
 function v9UpdateAccountUI() {
   const unbound = document.getElementById('v9AccountUnbound');
   const bound = document.getElementById('v9AccountBound');
@@ -3001,8 +3019,9 @@ function v9FirestoreUrl() {
 
 async function v9ReadCloudState() {
   const url = v9FirestoreUrl();
-  if (!url || !v9Account || !v9Account.idToken) return null;
-  const response = await fetch(url, { headers: { 'Authorization': 'Bearer ' + v9Account.idToken } });
+  if (!url || !v9Account) return null;
+  const idToken = await v9EnsureIdToken();
+  const response = await fetch(url, { headers: { 'Authorization': 'Bearer ' + idToken } });
   if (response.status === 404) return null;
   const data = await response.json().catch(function() { return {}; });
   if (!response.ok) throw new Error((data.error && data.error.message) || '读取云端档案失败');
@@ -3014,7 +3033,8 @@ async function v9ReadCloudState() {
 
 async function v9WriteCloudState(state, force) {
   const baseUrl = v9FirestoreUrl();
-  if (!baseUrl || !v9Account || !v9Account.idToken) return;
+  if (!baseUrl || !v9Account) return;
+  const idToken = await v9EnsureIdToken();
   let url = baseUrl;
   // ponytail: one-document optimistic lock; add per-card records only when concurrent editing volume requires it.
   if (!force) {
@@ -3024,7 +3044,7 @@ async function v9WriteCloudState(state, force) {
   }
   const response = await fetch(url, {
     method: 'PATCH',
-    headers: { 'Authorization': 'Bearer ' + v9Account.idToken, 'Content-Type': 'application/json' },
+    headers: { 'Authorization': 'Bearer ' + idToken, 'Content-Type': 'application/json' },
     body: JSON.stringify({ fields: { stateJson: { stringValue: JSON.stringify(state) }, updatedAt: { timestampValue: new Date().toISOString() } } })
   });
   const data = await response.json().catch(function() { return {}; });
@@ -3090,7 +3110,7 @@ function v9StartPolling() {
 }
 
 async function v9ActivateAccount(response, accountId) {
-  v9RememberAccount({ accountId: v9NormalizeAccountId(accountId), uid: response.localId, idToken: response.idToken, refreshToken: response.refreshToken });
+  v9RememberAccount({ accountId: v9NormalizeAccountId(accountId), uid: response.localId, idToken: response.idToken, refreshToken: response.refreshToken, tokenExpiresAt: v9TokenExpiry(response) });
   if (syncIntervalId) { clearInterval(syncIntervalId); syncIntervalId = null; }
   v9UpdateAccountUI();
   await v9LoadAccountState();
@@ -3148,7 +3168,7 @@ async function restoreV9Account() {
     });
     const data = await response.json().catch(function() { return {}; });
     if (!response.ok) throw new Error('刷新登录状态失败');
-    v9RememberAccount({ accountId: saved.accountId, uid: data.user_id, idToken: data.id_token, refreshToken: data.refresh_token });
+    v9RememberAccount({ accountId: saved.accountId, uid: data.user_id, idToken: data.id_token, refreshToken: data.refresh_token, tokenExpiresAt: v9TokenExpiry(data) });
     v9UpdateAccountUI();
     return true;
   } catch (error) {
