@@ -4537,6 +4537,7 @@ function openCompanyModalForEdit(companyId) {
   const item = (st._custom_companies || []).find(c => c.id === companyId);
   if (!item) { showToast('未找到该公司'); return; }
   _editingCompanyId = companyId;
+  const displayedTags = Array.isArray(item.tags) ? item.tags : getCompanyTabs(item.company, item.id);
   openCompanyModal(item.section);
   // Fill in existing data
   document.getElementById("cmCompany").value = item.company || '';
@@ -4552,13 +4553,13 @@ function openCompanyModalForEdit(companyId) {
   // 回显已选标签
   setTimeout(function() {
     const cmTagsContainer = document.getElementById("cmTagsContainer");
-    if (cmTagsContainer && Array.isArray(item.tags)) {
+    if (cmTagsContainer) {
       // 清除默认选中
       cmTagsContainer.querySelectorAll('.cm-tag-item.selected').forEach(function(el) {
         el.classList.remove('selected');
       });
       // 选中公司已有的标签
-      item.tags.forEach(function(tag) {
+      displayedTags.forEach(function(tag) {
         var tagEl = cmTagsContainer.querySelector('[data-tag="' + tag + '"]');
         if (tagEl) tagEl.classList.add('selected');
       });
@@ -6278,6 +6279,7 @@ async function aiRecommendDirect() {
     // Add companies to state (reuse st from earlier)
     if (!st._custom_companies) st._custom_companies = [];
     const priLabelMap = { "high": "⭐⭐⭐", "mid": "⭐⭐", "low": "⭐" };
+    const recommendationTags = getAutomaticTagsForIndustry(industry);
     let addedCount = 0;
 
     // Helper: fuzzy match company names (handles "米哈游" vs "miHoYo" vs "上海米哈游")
@@ -6303,14 +6305,8 @@ async function aiRecommendDirect() {
       const newId = "custom_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
       st._custom_companies.push({
         id: newId,
-        section: (function() { 
-          try { 
-            var p = JSON.parse(localStorage.getItem('user_profile') || '{}'); 
-            if (p.industry && p.industry !== '未指定' && p.industry !== '其他') 
-              return p.industry; 
-          } catch(e){} 
-          return '自定义'; 
-        })(),
+        section: recommendationTags[0],
+        tags: recommendationTags.slice(),
         company: item.company || "未知公司",
         position: (item.positions || []).join(' / '),
         location: item.location || '待定',
@@ -8130,6 +8126,7 @@ window.addEventListener("offline", () => {
       const st = loadState();
       if (!st._custom_companies) st._custom_companies = [];
       const priLabelMap = { "high": "⭐⭐⭐", "mid": "⭐⭐", "low": "⭐" };
+      const recommendationTags = getAutomaticTagsForIndustry(industry);
       parsed.forEach(item => {
         const links = [];
         if (item.applyLink || item.website) {
@@ -8137,7 +8134,8 @@ window.addEventListener("offline", () => {
         }
         st._custom_companies.push({
           id: "custom_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
-          section: (function() { try { var p = JSON.parse(localStorage.getItem('user_profile') || '{}'); if (p.industry && p.industry !== '未指定' && p.industry !== '其他') return p.industry; } catch(e){} return '自定义'; })(),
+          section: recommendationTags[0],
+          tags: recommendationTags.slice(),
           company: item.company || "未知公司",
           position: (item.positions || []).join(' / '),
           location: item.location || '待定',
@@ -8887,6 +8885,43 @@ function refreshTagGroups() {
   REFERRAL_TAG_GROUPS = getAllTagGroups();
 }
 
+// 将 AI 推荐使用的目标行业转换为实际标签；自定义行业也会成为可编辑标签。
+function getAutomaticTagsForIndustry(industry) {
+  var value = String(industry || '').trim().replace(/公司$/, '');
+  if (INDUSTRY_ALIAS_MAP[value]) value = INDUSTRY_ALIAS_MAP[value];
+  if (!value || value === '未指定' || value === '其他' || value === '自定义') return ['其他'];
+
+  var aliases = { '硬件': '硬件制造', '汽车': '汽车出行', '教育': '教培', '医疗': '医药' };
+  var tags = [];
+  value.split(/[|,，/、；;]+/).map(function(part) { return part.trim(); }).filter(Boolean).forEach(function(part) {
+    var tag = aliases[part] || part;
+    if (!REFERRAL_TAG_GROUPS[tag]) {
+      var groupNames = Object.keys(REFERRAL_TAG_GROUPS);
+      for (var i = 0; i < groupNames.length; i++) {
+        if (REFERRAL_TAG_GROUPS[groupNames[i]].indexOf(tag) !== -1) {
+          tag = groupNames[i];
+          break;
+        }
+      }
+    }
+    if (tags.indexOf(tag) === -1) tags.push(tag);
+  });
+
+  var userGroups = getUserTagGroups();
+  var changed = false;
+  tags.forEach(function(tag) {
+    if (!REFERRAL_TAG_GROUPS[tag] && !userGroups[tag]) {
+      userGroups[tag] = [tag];
+      changed = true;
+    }
+  });
+  if (changed) {
+    setUserTagGroups(userGroups);
+    refreshTagGroups();
+  }
+  return tags.length ? tags : ['其他'];
+}
+
 // ===== 新建自定义标签 =====
 function addCustomTag() {
   const tagName = prompt('请输入新标签名称：');
@@ -9075,11 +9110,12 @@ function lookupReferral(companyName) {
 function getCompanyTabs(companyName, companyId) {
   var tabs = {};
   var tabArr = [];
+  var companyData = null;
   
   // 1. 先获取用户手动设置的标签（优先级最高）
   if (companyId) {
     const st = loadState();
-    const companyData = (st._custom_companies || []).find(function(c) { return c.id === companyId; });
+    companyData = (st._custom_companies || []).find(function(c) { return c.id === companyId; });
     if (companyData && Array.isArray(companyData.tags) && companyData.tags.length > 0) {
       return Array.from(new Set(companyData.tags));
     }
@@ -9140,7 +9176,12 @@ function getCompanyTabs(companyName, companyId) {
     }
   }
   
-  // 4. 如果还是没有标签，返回 ['其他']
+  // 4. 兼容旧 AI 卡片：从保存的目标行业补算自动标签。
+  if (tabArr.length === 0 && companyData) {
+    return getAutomaticTagsForIndustry(companyData.section);
+  }
+
+  // 5. 如果还是没有标签，返回 ['其他']
   return tabArr.length > 0 ? tabArr : ['其他'];
 }
 </script>
